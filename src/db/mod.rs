@@ -1,5 +1,6 @@
 pub mod nodes;
 pub mod schema;
+pub mod subscriptions;
 
 use turso::{Builder, Connection};
 
