@@ -1,5 +1,6 @@
 pub mod nodes;
 pub mod profiles;
+pub mod runtime_settings;
 pub mod schema;
 pub mod subscriptions;
 
