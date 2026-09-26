@@ -3,6 +3,7 @@ name = "v2rayQ"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+license = "BSD-3-Clause"
 
 [dependencies]
 base64 = "0.22"
