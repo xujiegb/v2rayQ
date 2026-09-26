@@ -3,6 +3,7 @@ pub mod hysteria2;
 pub mod shadowsocks;
 pub mod trojan;
 pub mod vless;
+pub mod vmess;
 
 use thiserror::Error;
 use url::Url;
@@ -16,13 +17,15 @@ pub enum ParseError {
     #[error(transparent)]
     Hysteria2(#[from] hysteria2::Hysteria2ParseError),
     #[error(transparent)]
-    Url(#[from] url::ParseError),
-    #[error(transparent)]
     Shadowsocks(#[from] shadowsocks::ShadowsocksParseError),
     #[error(transparent)]
     Trojan(#[from] trojan::TrojanParseError),
     #[error(transparent)]
+    Url(#[from] url::ParseError),
+    #[error(transparent)]
     Vless(#[from] vless::VlessParseError),
+    #[error(transparent)]
+    Vmess(#[from] vmess::VmessParseError),
     #[error("unsupported protocol: {0}")]
     UnsupportedProtocol(String),
 }
@@ -36,6 +39,7 @@ pub fn parse(input: &str) -> Result<Node, ParseError> {
         "ss" => Ok(shadowsocks::parse(input)?),
         "trojan" => Ok(trojan::parse(input)?),
         "vless" => Ok(vless::parse(input)?),
+        "vmess" => Ok(vmess::parse(input)?),
         scheme => Err(ParseError::UnsupportedProtocol(scheme.to_owned())),
     }
 }
