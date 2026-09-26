@@ -1,4 +1,5 @@
 pub mod shadowsocks;
+pub mod trojan;
 pub mod vless;
 
 use thiserror::Error;
@@ -13,6 +14,8 @@ pub enum ParseError {
     #[error(transparent)]
     Shadowsocks(#[from] shadowsocks::ShadowsocksParseError),
     #[error(transparent)]
+    Trojan(#[from] trojan::TrojanParseError),
+    #[error(transparent)]
     Vless(#[from] vless::VlessParseError),
     #[error("unsupported protocol: {0}")]
     UnsupportedProtocol(String),
@@ -23,6 +26,7 @@ pub fn parse(input: &str) -> Result<Node, ParseError> {
 
     match url.scheme() {
         "ss" => Ok(shadowsocks::parse(input)?),
+        "trojan" => Ok(trojan::parse(input)?),
         "vless" => Ok(vless::parse(input)?),
         scheme => Err(ParseError::UnsupportedProtocol(scheme.to_owned())),
     }
