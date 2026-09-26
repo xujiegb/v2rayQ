@@ -1,3 +1,4 @@
+pub mod nodes;
 pub mod schema;
 
 use turso::{Builder, Connection};
