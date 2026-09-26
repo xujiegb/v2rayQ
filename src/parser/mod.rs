@@ -1,3 +1,4 @@
+pub mod anytls;
 pub mod shadowsocks;
 pub mod trojan;
 pub mod vless;
@@ -9,6 +10,8 @@ use crate::model::Node;
 
 #[derive(Debug, Error)]
 pub enum ParseError {
+    #[error(transparent)]
+    AnyTls(#[from] anytls::AnyTlsParseError),
     #[error(transparent)]
     Url(#[from] url::ParseError),
     #[error(transparent)]
@@ -25,6 +28,7 @@ pub fn parse(input: &str) -> Result<Node, ParseError> {
     let url = Url::parse(input)?;
 
     match url.scheme() {
+        "anytls" => Ok(anytls::parse(input)?),
         "ss" => Ok(shadowsocks::parse(input)?),
         "trojan" => Ok(trojan::parse(input)?),
         "vless" => Ok(vless::parse(input)?),
