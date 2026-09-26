@@ -101,6 +101,7 @@ pub struct Tls {
     pub insecure: bool,
     pub alpn: Vec<String>,
     pub fingerprint: Option<String>,
+    pub ech: Option<String>,
     pub reality: Option<Reality>,
 }
 
@@ -113,7 +114,6 @@ pub struct Reality {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Transport {
-    Tcp,
     WebSocket {
         path: String,
         host: Option<String>,
