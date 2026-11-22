@@ -1,8 +1,10 @@
 [package]
 name = "v2rayq-server"
 version = "0.1.0"
-edition = "2024"
-license = "BSD-3-Clause"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 
-# Intentionally std-only until the real Core protocol becomes public.
 [dependencies]
+v2rayq-contracts = { path = "../../crates/contracts" }
+v2rayq-http-preview = { path = "../../crates/http-preview" }

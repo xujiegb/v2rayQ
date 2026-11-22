@@ -1,22 +1,39 @@
 [workspace]
-members = [".", "apps/client", "apps/server"]
+members = [".", "apps/client", "apps/server", "apps/web-client", "crates/contracts", "crates/http-preview"]
 resolver = "3"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.95"
+license = "BSD-3-Clause"
 
 [package]
 name = "v2rayQ"
 version = "0.1.0"
-edition = "2024"
-rust-version = "1.88"
-license = "BSD-3-Clause"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+# Existing command-line interface and Turso storage are kept for migration,
+# but cannot block builds of the native and web applications.
+legacy-tui = ["database", "dep:crossterm", "dep:ratatui", "dep:tokio"]
+database = ["dep:turso"]
+
+[[bin]]
+name = "v2rayq-tui"
+path = "src/main.rs"
+required-features = ["legacy-tui"]
 
 [dependencies]
 base64 = "0.23.1"
-crossterm = "0.29"
-ratatui = "0.30.2"
+crossterm = { version = "0.29", optional = true }
+ratatui = { version = "0.30.2", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-turso = "0.8.4"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"], optional = true }
+turso = { version = "0.8.4", optional = true }
 url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }

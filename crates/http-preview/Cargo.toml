@@ -1,0 +1,9 @@
+[package]
+name = "v2rayq-http-preview"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+v2rayq-contracts = { path = "../contracts" }
