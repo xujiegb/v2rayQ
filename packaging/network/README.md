@@ -10,7 +10,7 @@ The client controls a fixed pair of operating-system services. Install the engin
 | FreeBSD rc | `/usr/local/etc/rc.d/v2rayq_tun` | `/usr/local/etc/rc.d/v2rayq_transparent` |
 | Windows SCM | `v2rayq-tun` | `v2rayq-transparent` |
 
-The [example systemd units](systemd/) expect `/usr/bin/sing-box` and respective administrator-owned `/etc/v2rayq/tun.json` and `/etc/v2rayq/transparent.json` configurations. Validate the selected engine configuration and place the unit files under `/etc/systemd/system` before invoking `systemctl daemon-reload`. The units conflict so only one example service runs at a time. On OpenWrt, provide procd `running`, `start` and `stop` support. On macOS, bootstrap the jobs into the system domain and leave `KeepAlive` off so `launchctl kill SIGTERM` can stop them. On FreeBSD, provide `onestart`, `onestop` and `onestatus` via rc.subr. Windows needs a service compatible with the Service Control Manager and an account authorized to control it.
+Install the custom Core and service definitions once its launcher and configuration format are available. The Linux service units should declare a conflict if the two modes manage the same routes or firewall rules. On OpenWrt, provide procd `running`, `start` and `stop` support. On macOS, bootstrap the jobs into the system domain and leave `KeepAlive` off so `launchctl kill SIGTERM` can stop them. On FreeBSD, provide `onestart`, `onestop` and `onestatus` via rc.subr. Windows needs a service compatible with the Service Control Manager and an account authorized to control it.
 
 ```sh
 v2rayq-cli status

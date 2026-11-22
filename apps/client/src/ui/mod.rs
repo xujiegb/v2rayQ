@@ -6,7 +6,7 @@ use std::{
 use eframe::egui::{self, Color32, RichText};
 use v2rayQ::{
     client::{
-        Access, ClientService, Command, ManualNode, Profile, ProtocolKind, Reply,
+        Access, ClientService, Command, ManualNode, ManualTransport, Profile, ProtocolKind, Reply,
         default_data_path,
         runtime::{NetworkMode, Runtime, ServiceStatus},
     },
@@ -33,7 +33,7 @@ enum Page {
     Settings,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum NodeForm {
     None,
     Share,
@@ -51,11 +51,14 @@ pub struct ClientApp {
     subscription_name: String,
     subscription_url: String,
     manual: ManualNode,
+    query: String,
+    node_page: usize,
+    confirm_subscription: Option<usize>,
     routing: Option<(RouteMode, String)>,
     notice: String,
     pending: usize,
     commands: Sender<Command>,
-    replies: Receiver<Result<Reply, String>>,
+    replies: Receiver<(NodeForm, Result<Reply, String>)>,
 }
 
 impl ClientApp {
@@ -75,8 +78,14 @@ impl ClientApp {
         let service = ClientService::new(data_path.to_owned());
         std::thread::spawn(move || {
             while let Ok(command) = requests.recv() {
+                let form = match command {
+                    Command::AddLink { .. } => NodeForm::Share,
+                    Command::AddNode { .. } => NodeForm::Manual,
+                    Command::AddSubscription { .. } => NodeForm::Subscription,
+                    _ => NodeForm::None,
+                };
                 if responses
-                    .send(service.call(command, Access::Desktop))
+                    .send((form, service.call(command, Access::Desktop)))
                     .is_err()
                 {
                     break;
@@ -94,6 +103,9 @@ impl ClientApp {
             subscription_name: String::new(),
             subscription_url: String::new(),
             manual: ManualNode::default(),
+            query: String::new(),
+            node_page: 0,
+            confirm_subscription: None,
             routing: None,
             notice: String::new(),
             pending: 0,
@@ -114,7 +126,7 @@ impl ClientApp {
     }
 
     fn receive(&mut self) {
-        while let Ok(result) = self.replies.try_recv() {
+        while let Ok((submitted_form, result)) = self.replies.try_recv() {
             self.pending = self.pending.saturating_sub(1);
             match result {
                 Ok(reply) => {
@@ -126,9 +138,21 @@ impl ClientApp {
                             )
                         });
                         self.profile = data;
+                        self.confirm_subscription = None;
                     }
                     if let Some(runtime) = reply.runtime {
                         self.runtime = runtime;
+                    }
+                    match submitted_form {
+                        NodeForm::Share => self.share_link.clear(),
+                        NodeForm::Subscription => {
+                            self.subscription_name.clear();
+                            self.subscription_url.clear();
+                        }
+                        _ => {}
+                    }
+                    if self.form == submitted_form {
+                        self.form = NodeForm::None;
                     }
                     if let Some(message) = reply.message {
                         self.notice = message;

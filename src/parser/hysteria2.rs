@@ -32,7 +32,7 @@ pub enum Hysteria2ParseError {
     UnsupportedObfs(String),
     #[error("obfuscation password is required")]
     MissingObfsPassword,
-    #[error("pinSHA256 requires sing-box 1.15.0 or newer")]
+    #[error("certificate pinning is not supported by the current node profile")]
     UnsupportedPinSha256,
     #[error("invalid ECH configuration")]
     InvalidEch,
@@ -459,7 +459,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_certificate_pin_on_sing_box_1_14() {
+    fn rejects_certificate_pin_without_profile_support() {
         let error = parse(
             "hy2://password@example.com/?pinSHA256=deadbeef",
         )

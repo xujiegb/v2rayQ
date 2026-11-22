@@ -4,7 +4,7 @@ Rust 2024 proxy client and server panels. The client uses a single Rust profile 
 
 | Entry point | Platforms | Features |
 | --- | --- | --- |
-| `v2rayq-client` | Windows, macOS, Linux, FreeBSD; iOS simulator build | Native egui profile editor and network service controls |
+| `v2rayq-client` | Windows, macOS, Linux, FreeBSD; iOS simulator build | Native egui profile editor, node search and network service controls |
 | `v2rayq-web-client` | Windows, macOS, Linux, FreeBSD | Local browser UI sharing the desktop and CLI profile database |
 | `v2rayq-cli` | Windows, macOS, Linux, FreeBSD | Node and subscription commands, routing preferences, network service controls |
 | LuCI client | OpenWrt | Shared Web UI assets with a small LuCI/RPC wrapper |
@@ -30,7 +30,7 @@ For OpenWrt, build `frontends/luci` as an OpenWrt package and install the target
 
 ## Profiles and network services
 
-The client accepts HTTPS subscriptions containing plain-text or base64-wrapped share links. Supported schemes are VLESS, VMess, Trojan, Shadowsocks, AnyTLS and Hysteria2. A failed subscription refresh keeps the previously imported nodes. The CLI accepts node and subscription secrets on stdin. Use `v2rayq-cli add-node` with a JSON object containing `protocol`, `name`, `host`, `port` and `credential`. Optional fields are `method`, `tls` and `server_name`. The protocol keys are `vless`, `vmess`, `trojan`, `shadowsocks`, `any_tls` and `hysteria2`.
+The client accepts HTTPS subscriptions containing plain-text or base64-wrapped share links. Supported schemes are VLESS, VMess, Trojan, Shadowsocks, AnyTLS and Hysteria2. A failed subscription refresh keeps the previously imported nodes. The CLI accepts node and subscription secrets on stdin. The clients share transport and TLS/ALPN options for manual nodes. Use `v2rayq-cli add-node` with a JSON object containing `protocol`, `name`, `host`, `port` and `credential`. Optional fields include `method`, `tls`, `server_name`, `alpn`, `transport`, `transport_path`, `transport_host` and `service_name`. The protocol keys are `vless`, `vmess`, `trojan`, `shadowsocks`, `any_tls` and `hysteria2`.
 
 The default client database is `client.redb` in the user configuration directory. The first read or edit imports a previous `client.json` and retains that file. Keep any Turso/SQLite `v2rayQ.db` for a separate migration. Both redb stores may contain unencrypted credentials. `V2RAYQ_CLIENT_DB` and `V2RAYQ_SERVER_DB` override their respective paths.
 
@@ -38,7 +38,7 @@ TUN and transparent proxy controls start and stop administrator-provisioned host
 
 ## Server panel
 
-Overview and System display persisted configuration counts and local host information. Inbounds, Users, Outbounds, Nodes, Services, TLS, Routes, DNS, Administrators and Settings store independent drafts in `server.redb`. The external Core adapter is pending. Draft records do not configure a running Core or create active administrator accounts.
+Overview and System display persisted configuration counts and local host information. Inbounds, Users, Outbounds, Nodes, Services, TLS, Routes, DNS, Administrators and Settings store independent drafts in `server.redb`. The editor provides per-section fields and an optional JSON view for additional draft settings. The external Core adapter is pending. Draft records do not configure a running Core or create active administrator accounts.
 
 ## Source layout
 

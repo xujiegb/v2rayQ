@@ -3,8 +3,8 @@ mod manual;
 pub mod runtime;
 mod service;
 
-pub use manual::{ManualNode, ProtocolKind};
-pub use service::{Access, ClientService, Command, Profile, Reply};
+pub use manual::{ManualNode, ManualTransport, ProtocolKind};
+pub use service::{Access, ClientService, Command, NodeSummary, Profile, Reply};
 use std::{
     fs, io,
     path::{Path, PathBuf},

@@ -40,7 +40,7 @@ pub enum VlessParseError {
     UnsupportedFlow(String),
     #[error("unsupported gRPC mode: {0}")]
     UnsupportedGrpcMode(String),
-    #[error("gRPC authority is not supported by sing-box")]
+    #[error("gRPC authority is not supported by the current node profile")]
     UnsupportedGrpcAuthority,
     #[error("missing REALITY public key")]
     MissingRealityPublicKey,

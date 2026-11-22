@@ -5,6 +5,7 @@ const clientPages = [
   ["settings", "Settings", "⚙"]
 ];
 const protocols = { vless: "VLESS", vmess: "VMess", trojan: "Trojan", shadowsocks: "Shadowsocks", any_tls: "AnyTLS", hysteria2: "Hysteria2" };
+const transports = { tcp: "TCP", web_socket: "WebSocket", http: "HTTP", http_upgrade: "HTTP Upgrade", grpc: "gRPC" };
 const modes = { direct: "Direct", global: "Global", rules: "Rule-based" };
 const services = { tun: "TUN", transparent: "Transparent proxy" };
 
@@ -27,6 +28,7 @@ function field(label, name, options = {}) {
   const input = element(options.choices ? "select" : "input");
   input.name = name;
   if (options.choices) {
+    input.setAttribute("aria-label", label);
     for (const [value, title] of Object.entries(options.choices)) {
       const option = element("option", "", title);
       option.value = value;
@@ -68,7 +70,7 @@ function serviceLabel(status) {
 }
 
 export function mountClient(root, send, { delegatedControl = false } = {}) {
-  const state = { page: "overview", form: "", busy: false, profile: null, runtime: {} };
+  const state = { page: "overview", form: "", busy: false, profile: null, runtime: {}, query: "", nodePage: 0 };
   const rail = element("aside", "vq-rail");
   const brand = element("div", "vq-brand");
   brand.append(element("span", "vq-mark", "◇"), element("strong", "", "v2rayQ"));
@@ -137,6 +139,15 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
       const cipher = field("Cipher", "method", { value: "aes-128-gcm" });
       const sni = field("TLS server name", "server_name");
       const tls = field("TLS", "tls", { type: "checkbox" });
+      const transport = field("Transport", "transport", { choices: transports });
+      const transportPath = field("Transport path", "transport_path");
+      const transportHost = field("Transport host", "transport_host");
+      const serviceName = field("gRPC service name", "service_name");
+      const alpn = field("ALPN (comma separated)", "alpn");
+      const advanced = element("details", "vq-advanced");
+      const options = element("div", "vq-form");
+      options.append(transport, transportPath, transportHost, serviceName, alpn);
+      advanced.append(element("summary", "", "Advanced connection options"), options);
       const updateProtocol = () => {
         const kind = protocol.lastChild.value;
         const uuid = kind === "vless" || kind === "vmess";
@@ -144,12 +155,20 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
         credential.lastChild.required = kind !== "hysteria2";
         cipher.hidden = kind !== "shadowsocks";
         tls.hidden = !uuid;
+        const transportVisible = uuid || kind === "trojan";
+        const transportKind = transport.lastChild.value;
         sni.hidden = kind === "shadowsocks" || (uuid && !tls.lastChild.checked);
+        advanced.hidden = kind === "shadowsocks";
+        transport.hidden = !transportVisible;
+        transportPath.hidden = transportHost.hidden = !transportVisible || transportKind === "tcp" || transportKind === "grpc";
+        serviceName.hidden = !transportVisible || transportKind !== "grpc";
+        alpn.hidden = sni.hidden;
       };
       protocol.onchange = updateProtocol;
       tls.onchange = updateProtocol;
+      transport.onchange = updateProtocol;
       form.append(protocol, field("Name", "name", { required: true }), field("Server", "host", { required: true }),
-        field("Port", "port", { value: "443", numeric: true, required: true }), credential, cipher, tls, sni);
+        field("Port", "port", { value: "443", numeric: true, required: true }), credential, cipher, tls, sni, advanced);
       updateProtocol();
     }
     form.append(submit);
@@ -178,13 +197,46 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
       item.setAttribute("aria-pressed", String(state.form === key));
       actions.append(item);
     }
-    const nodeRows = profile.nodes.map(node => {
-      const selected = node.id === profile.selected_node;
-      const select = button(selected ? "Selected" : "Select", () => perform({ action: "select_node", id: node.id }));
-      select.disabled = selected;
-      return row(node.name, `${protocols[node.protocol]} · ${endpoint(node)}`, select,
-        button("Delete", () => perform({ action: "remove_node", id: node.id }), "vq-delete"));
+    const search = field("Search nodes", "node-search", { type: "search", value: state.query });
+    const nodeRows = element("div");
+    const pagination = element("div", "vq-pagination");
+    pagination.setAttribute("aria-label", "Node pages");
+    const pageSize = 30;
+    function showNodes() {
+      const query = state.query.trim().toLowerCase();
+      const matches = query ? profile.nodes.filter(node =>
+        [node.name, endpoint(node), protocols[node.protocol]].some(value => value.toLowerCase().includes(query))) : profile.nodes;
+      const totalPages = Math.max(1, Math.ceil(matches.length / pageSize));
+      state.nodePage = Math.min(state.nodePage, totalPages - 1);
+      const start = state.nodePage * pageSize;
+      nodeRows.replaceChildren(...matches.slice(start, start + pageSize).map(node => {
+        const selected = node.id === profile.selected_node;
+        const select = button(selected ? "Selected" : "Select", () => perform({ action: "select_node", id: node.id }));
+        select.disabled = selected;
+        const source = profile.subscriptions.find(item => item.id === node.subscription_id)?.name;
+        const detail = `${protocols[node.protocol]} · ${endpoint(node)}${source ? ` · ${source}` : ""}`;
+        return row(node.name, detail, select, button("Delete", () => perform({ action: "remove_node", id: node.id }), "vq-delete"));
+      }));
+      if (!matches.length) nodeRows.append(element("p", "", query ? "No matching nodes." : "No nodes saved."));
+      const nodeCount = `${matches.length} ${matches.length === 1 ? "node" : "nodes"}`;
+      const label = totalPages > 1 ? `${nodeCount} · ${state.nodePage + 1} / ${totalPages}` : nodeCount;
+      const count = element("small", "", label);
+      count.setAttribute("role", "status");
+      pagination.replaceChildren(count);
+      if (totalPages > 1) {
+        const previous = button("Previous", () => { state.nodePage--; showNodes(); });
+        const next = button("Next", () => { state.nodePage++; showNodes(); });
+        previous.disabled = state.nodePage === 0;
+        next.disabled = state.nodePage + 1 >= totalPages;
+        pagination.append(previous, next);
+      }
+    }
+    search.lastChild.addEventListener("input", event => {
+      state.query = event.target.value;
+      state.nodePage = 0;
+      showNodes();
     });
+    showNodes();
     const subscriptions = profile.subscriptions.map(item => row(item.name,
       item.last_error || (item.last_updated_at ? `Updated ${new Date(item.last_updated_at * 1000).toLocaleString()}` : "Awaiting refresh"),
       button("Refresh", () => perform({ action: "refresh_subscription", id: item.id })),
@@ -192,7 +244,7 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
         if (window.confirm("Delete this subscription and its imported nodes?")) perform({ action: "remove_subscription", id: item.id });
       }, "vq-delete")));
     return [actions, ...(state.form ? [importForm()] : []),
-      card("Saved nodes", ...(nodeRows.length ? nodeRows : [element("p", "", "No nodes saved.")])),
+      card("Saved nodes", search, nodeRows, pagination),
       card("Subscriptions", ...(subscriptions.length ? subscriptions : [element("p", "", "No subscriptions saved.")]))];
   }
 
@@ -200,7 +252,7 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
     const form = element("form", "vq-form");
     const save = button("Save routing", null, "vq-primary");
     save.type = "submit";
-    form.append(element("p", "", "Installed proxy services use their own configuration."),
+    form.append(element("p", "", "Saved to your client profile. Applies once the Core supports these controls."),
       field("Outbound policy", "route_mode", { choices: modes, value: settings.route_mode }),
       field("DNS resolver", "dns_server", { value: settings.dns_server }), save);
     form.onsubmit = event => {

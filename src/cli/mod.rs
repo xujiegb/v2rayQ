@@ -188,7 +188,7 @@ impl App {
                 Line::from("TUN: disabled"),
             ],
             Page::Status => vec![
-                Line::from("sing-box: unknown"),
+                Line::from("Core: unavailable"),
                 Line::from("v2rayQ database: not connected"),
             ],
         };

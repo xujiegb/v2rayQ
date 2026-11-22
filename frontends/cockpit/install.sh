@@ -15,7 +15,7 @@ install_panel() {
     if [ "$panel" = client ]; then
         install -m 0644 "$client_assets/client.css" "$client_assets/client-ui.js" frontends/web/client-entry.mjs "$dest/assets/"
     else
-        install -m 0644 frontends/web/server.css frontends/web/server.mjs "$dest/assets/"
+        install -m 0644 frontends/web/server.css frontends/web/server.mjs frontends/web/server-fields.mjs "$dest/assets/"
     fi
     printf 'Installed v2rayQ Cockpit %s panel to %s\n' "$panel" "$dest"
 }

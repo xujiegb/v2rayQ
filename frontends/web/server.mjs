@@ -1,4 +1,5 @@
 import { transport } from "./transport.mjs";
+import { fields, defaults } from "./server-fields.mjs";
 
 const serverPages = [
   ["overview", "Overview", "⌂", "Status"],
@@ -14,12 +15,6 @@ const serverPages = [
   ["administrators", "Administrators", "♙", "Administration"],
   ["settings", "Settings", "⚙", "Administration"]
 ];
-const examples = {
-  inbounds: { tag: "listener", type: "vless", listen: "::", listen_port: 443 },
-  users: { name: "", enabled: true }, outbounds: { tag: "direct", type: "direct" },
-  nodes: { name: "", server: "", server_port: 443 }, services: { name: "", enabled: false }, tls: { name: "", certificate_path: "", key_path: "" },
-  routes: { domain_suffix: [], outbound: "direct" }, administrators: { username: "", role: "viewer" }
-};
 const nav = document.getElementById("navigation");
 const heading = document.getElementById("heading");
 const notice = document.getElementById("notice");
@@ -70,22 +65,97 @@ function editor(section, title, draft) {
   const isList = Array.isArray(draft.value);
   const layout = element("div", "editor-layout");
   const controls = element("div", "actions");
+  const form = element("form", "editor-form");
+  const inputs = element("div", "editor-fields");
+  const advanced = element("details", "raw-editor");
   const textarea = element("textarea");
   textarea.setAttribute("aria-label", `${title} JSON`);
   textarea.spellcheck = false;
+  advanced.append(element("summary", "", "Edit JSON"), textarea);
   const label = element("h2", "", "Edit configuration");
   const edit = element("section", "panel edit");
   const list = panel(title);
+  let current = {};
   let index = null;
   let saving = false;
+
+  function drawFields() {
+    inputs.replaceChildren();
+    for (const [key, title, kind] of fields[section]) {
+      const value = current[key];
+      const compatible = value === undefined || (kind === "list" && Array.isArray(value) && value.every(item => typeof item === "string"))
+        || (kind === "port" && typeof value === "number") || (kind === "boolean" && typeof value === "boolean")
+        || (!kind && typeof value === "string");
+      if (!compatible) continue; // Keep structured or legacy values editable in the JSON view.
+      const wrapper = element("label", "editor-field", title);
+      const input = element("input");
+      input.name = key;
+      if (kind === "boolean") {
+        input.type = "checkbox";
+        input.checked = value === true;
+        input.indeterminate = value === undefined;
+      } else {
+        input.type = kind === "port" ? "number" : "text";
+        if (kind === "port") { input.min = "1"; input.max = "65535"; }
+        if (kind === "list") input.placeholder = "Separate values with commas";
+        input.value = Array.isArray(value) ? value.join(", ") : value ?? "";
+      }
+      input.oninput = () => { input.dataset.edited = "true"; };
+      wrapper.append(input);
+      inputs.append(wrapper);
+    }
+  }
+
+  function fieldValues() {
+    const value = { ...current };
+    for (const [key, , kind] of fields[section]) {
+      const input = inputs.querySelector(`[name="${key}"]`);
+      if (!input || input.dataset.edited !== "true" || input.indeterminate) continue;
+      if (kind === "boolean") value[key] = input.checked;
+      else if (!input.value.trim()) delete value[key];
+      else if (kind === "list") value[key] = input.value.split(",").map(item => item.trim()).filter(Boolean);
+      else value[key] = kind === "port" ? input.valueAsNumber : input.value.trim();
+    }
+    return value;
+  }
+
+  function jsonValue() {
+    const value = JSON.parse(textarea.value);
+    if (value === null || Array.isArray(value) || typeof value !== "object") {
+      throw new Error("Enter one JSON object.");
+    }
+    return value;
+  }
+
+  advanced.querySelector("summary").onclick = event => {
+    event.preventDefault();
+    if (advanced.open) {
+      try {
+        current = jsonValue();
+        drawFields();
+      } catch {
+        notice.textContent = "Enter a valid JSON object before returning to the form.";
+        return;
+      }
+    } else {
+      if (!form.reportValidity()) return;
+      textarea.value = JSON.stringify(fieldValues(), null, 2);
+    }
+    advanced.open = !advanced.open;
+    inputs.hidden = advanced.open;
+    notice.textContent = "";
+  };
 
   function start(value, position) {
     if (saving) return;
     index = position;
-    textarea.value = JSON.stringify(value, null, 2);
-    label.textContent = position === null && isList ? `New ${title.toLowerCase()} record` : "Edit configuration";
+    current = value;
+    advanced.open = false;
+    inputs.hidden = false;
+    drawFields();
+    label.textContent = position === null && isList ? "New record" : "Edit configuration";
     edit.hidden = false;
-    textarea.focus();
+    if (isList) inputs.querySelector("input")?.focus();
   }
 
   async function save(value) {
@@ -98,6 +168,7 @@ function editor(section, title, draft) {
       if (!layout.isConnected) return;
       notice.textContent = "Draft saved.";
       if (isList) { edit.hidden = true; drawList(); }
+      else current = value;
     } catch (error) {
       if (layout.isConnected) notice.textContent = error.message;
     } finally {
@@ -107,8 +178,10 @@ function editor(section, title, draft) {
   }
 
   function drawList() {
-    list.replaceChildren(element("h2", "", `${draft.value.length} saved records`),
-      button("Add record", () => start(examples[section], null), "primary"));
+    const header = element("div", "list-header");
+    header.append(element("h2", "", `${draft.value.length} saved records`),
+      button("Add record", () => start(defaults[section] || {}, null), "primary"));
+    list.replaceChildren(header);
     draft.value.forEach((record, i) => {
       const row = element("div", "info-row");
       const candidate = record.name || record.tag || record.username || record.outbound;
@@ -122,25 +195,30 @@ function editor(section, title, draft) {
     });
   }
 
-  controls.append(button("Save draft", () => {
+  const submit = button("Save draft", null, "primary");
+  submit.type = "submit";
+  controls.append(submit);
+  if (isList) controls.append(button("Cancel", () => { edit.hidden = true; }));
+  form.append(inputs, advanced, controls);
+  form.onsubmit = event => {
+    event.preventDefault();
     if (saving) return;
     let value;
-    try { value = JSON.parse(textarea.value); }
-    catch { notice.textContent = "Enter valid JSON."; return; }
+    try { value = advanced.open ? jsonValue() : fieldValues(); }
+    catch { notice.textContent = "Enter a valid JSON object."; return; }
     if (!isList) { save(value); return; }
     const records = [...draft.value];
     if (index === null) records.push(value);
     else records[index] = value;
     save(records);
-  }, "primary"));
-  if (isList) controls.append(button("Cancel", () => { edit.hidden = true; }));
-  edit.append(label, textarea, controls);
+  };
+  edit.append(label, form);
   if (isList) {
     drawList();
     edit.hidden = true;
     layout.append(list, edit);
   } else {
-    textarea.value = JSON.stringify(draft.value, null, 2);
+    start(draft.value, null);
     layout.append(edit);
   }
   return [element("p", "draft-label", "Saved drafts are independent of the running proxy Core."), layout];

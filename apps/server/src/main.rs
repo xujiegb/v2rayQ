@@ -18,6 +18,11 @@ const ASSETS: &[Asset] = &[
         body: include_str!("../../../frontends/web/server.mjs"),
     },
     Asset {
+        path: "/assets/server-fields.mjs",
+        mime: "text/javascript; charset=utf-8",
+        body: include_str!("../../../frontends/web/server-fields.mjs"),
+    },
+    Asset {
         path: "/assets/transport.mjs",
         mime: "text/javascript; charset=utf-8",
         body: include_str!("../../../frontends/shared/transport.mjs"),

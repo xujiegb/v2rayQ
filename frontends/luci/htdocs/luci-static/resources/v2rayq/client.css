@@ -51,3 +51,10 @@
   .vq-client .vq-content { padding-top: 18px; }
 }
 @media (max-width: 400px) { .vq-client .vq-nav-item { padding: 6px; } .vq-client .vq-icon { display: none; } }
+
+.vq-client .vq-advanced { grid-column: 1 / -1; border: 1px solid var(--vq-edge); border-radius: 8px; padding: 8px 11px; }
+.vq-client .vq-advanced summary { cursor: pointer; font-weight: 650; }
+.vq-client .vq-advanced[open] summary { margin-bottom: 11px; }
+.vq-client .vq-card > .vq-field { margin: 9px 0 13px; max-width: 420px; }
+.vq-client .vq-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 9px; }
+.vq-client .vq-pagination small { margin-right: auto; color: var(--vq-muted); }
