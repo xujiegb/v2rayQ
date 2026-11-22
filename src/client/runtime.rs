@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Access;
 
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum NetworkMode {
     Tun,
@@ -24,12 +24,22 @@ pub struct ServiceStatus {
 
 #[derive(Default, Deserialize, Serialize)]
 pub struct Runtime {
+    #[serde(default)]
+    pub traffic: Traffic,
     pub tun: ServiceStatus,
     pub transparent: ServiceStatus,
 }
 
+#[derive(Default, Deserialize, Serialize)]
+pub struct Traffic {
+    pub core_connected: bool,
+    pub upload_bps: Option<u64>,
+    pub download_bps: Option<u64>,
+}
+
 pub fn status(access: Access) -> Runtime {
     Runtime {
+        traffic: Traffic::default(),
         tun: service(NetworkMode::Tun)
             .map_or_else(ServiceStatus::default, |item| item.status(access)),
         transparent: service(NetworkMode::Transparent)

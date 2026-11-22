@@ -15,6 +15,9 @@ use v2rayQ::{
 };
 use v2rayq_contracts::CLIENT_NAV;
 
+mod dashboard;
+mod groups;
+mod scan;
 mod pages;
 mod routes;
 mod settings;
@@ -42,6 +45,7 @@ enum NodeForm {
     Share,
     Manual,
     Subscription,
+    Scan,
 }
 
 #[derive(Clone, Copy)]
@@ -50,6 +54,8 @@ enum Completion {
     Endpoint,
     Rule,
     Merge,
+    Group,
+    Network,
     Other,
 }
 
@@ -70,6 +76,13 @@ pub struct ClientApp {
     page: Page,
     profile: Profile,
     runtime: Runtime,
+    ip_info: Option<v2rayQ::client::network::IpInfo>,
+    proxy_mode: NetworkMode,
+    group_filter: String,
+    group_edit: Option<Uuid>,
+    group_name: String,
+    scan_path: String,
+    scan_job: Option<Receiver<Result<scan::ScanResult, String>>>,
     translator: v2rayq_i18n::Translator,
     configuration: String,
     configuration_path: String,
@@ -116,6 +129,8 @@ impl ClientApp {
                     Command::AddSubscription { .. } | Command::UpdateSubscription { .. } => {
                         Completion::NodeForm(NodeForm::Subscription)
                     }
+                    Command::SetNetwork { .. } => Completion::Network,
+                    Command::SaveNodeGroup { .. } => Completion::Group,
                     Command::UpdateNode { .. } => Completion::Endpoint,
                     Command::SaveRouteRule { .. } => Completion::Rule,
                     Command::MergeConfiguration { preview: false, .. } => Completion::Merge,
@@ -134,6 +149,13 @@ impl ClientApp {
             page: Page::Home,
             profile: Profile::default(),
             runtime: Runtime::default(),
+            ip_info: None,
+            proxy_mode: NetworkMode::Tun,
+            group_filter: String::new(),
+            group_edit: None,
+            group_name: String::new(),
+            scan_path: String::new(),
+            scan_job: None,
             translator: language::RESOURCES.translator(&v2rayq_i18n::system_language()),
             configuration: String::new(),
             configuration_path: data_path
@@ -199,6 +221,7 @@ impl ClientApp {
                         self.profile = data;
                         self.confirm_subscription = None;
                     }
+                    if let Some(info) = reply.ip_info { self.ip_info = Some(info); }
                     if let Some(runtime) = reply.runtime {
                         self.runtime = runtime;
                     }
@@ -219,6 +242,8 @@ impl ClientApp {
                         Completion::Endpoint => self.endpoint_editor = None,
                         Completion::Rule => self.rule_editor = None,
                         Completion::Merge => self.configuration.clear(),
+                        Completion::Network => self.ip_info = None,
+                        Completion::Group => { self.group_edit = None; self.group_name.clear(); },
                         Completion::Other => {}
                     }
                     if let Some(configuration) = reply.configuration {
@@ -297,6 +322,7 @@ impl ClientApp {
 impl eframe::App for ClientApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.receive();
+        self.receive_scan(ui.ctx());
         self.navigation(ui);
         let margin = if ui.available_width() < 520.0 { 14 } else { 26 };
         egui::CentralPanel::default()

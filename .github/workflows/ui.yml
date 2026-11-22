@@ -1,0 +1,50 @@
+name: Interface flows
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ui:
+    name: Dashboard, groups and QR import
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Resolve workspace and check source formatting
+        env:
+          V2RAYQ_BASE_REF: ${{ github.event.pull_request.base.sha || 'HEAD^' }}
+        run: |
+          cargo update --workspace
+          python3 tools/format_sources.py
+          python3 - <<'PY'
+          import json, subprocess
+          diff = subprocess.check_output(["git", "diff", "--", "Cargo.lock", "*.rs"], text=True)
+          for offset in range(0, len(diff), 3000):
+              print("V2RAYQ_SOURCE_DIFF_PART=" + json.dumps(diff[offset:offset + 3000]))
+          PY
+      - name: Install browser-only test tools
+        run: |
+          npm install --no-save --no-package-lock playwright qrcode
+          npx playwright install --with-deps chromium
+      - name: Generate QR fixture and test the decoder
+        env:
+          V2RAYQ_QR_TEST_IMAGE: /tmp/v2rayq-qr.png
+        run: |
+          node -e 'require("qrcode").toFile(process.env.V2RAYQ_QR_TEST_IMAGE, "trojan://secret@example.org:443#QR")'
+          cargo test --locked -p v2rayq-qr
+      - run: cargo build --locked -p v2rayq-web-client -p v2rayq-server -p v2rayq-cli
+      - run: python3 tools/test_panel_api.py
+      - run: node tools/test_ui_flows.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interface-previews
+          path: dist/ui-previews/*
+          if-no-files-found: ignore
+      - name: Verify checked-in lockfile and Rust formatting
+        run: git diff --exit-code -- Cargo.lock '*.rs'

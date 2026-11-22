@@ -1,70 +1,6 @@
 use super::*;
 
 impl ClientApp {
-    pub(super) fn home(&mut self, ui: &mut egui::Ui) {
-        let tr = self.translator;
-        heading(ui, tr.text("Overview"));
-        let selected = self
-            .profile
-            .nodes
-            .iter()
-            .find(|node| Some(node.id) == self.profile.selected_node);
-        egui::Frame::new()
-            .fill(INK)
-            .corner_radius(14.0)
-            .inner_margin(egui::Margin::same(22))
-            .show(ui, |ui| {
-                ui.set_min_width(ui.available_width());
-                ui.label(
-                    RichText::new(tr.text("Selected node")).color(Color32::from_rgb(179, 195, 227)),
-                );
-                ui.label(
-                    RichText::new(selected.map_or(tr.text("Choose a node"), |node| &node.name))
-                        .size(25.0)
-                        .strong()
-                        .color(Color32::WHITE),
-                );
-                if let Some(node) = selected {
-                    ui.label(
-                        RichText::new(format!(
-                            "{}  ·  {}:{}",
-                            node.protocol.label(),
-                            node.host,
-                            node.port
-                        ))
-                        .color(Color32::LIGHT_GRAY),
-                    );
-                }
-            });
-        ui.add_space(12.0);
-        card(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(tr.message(&format!("{} nodes", self.profile.nodes.len())));
-                ui.label(tr.message(&format!(
-                    "{} subscriptions",
-                    self.profile.subscriptions.len()
-                )));
-                if ui.button(tr.text("Manage nodes")).clicked() {
-                    self.page = Page::Nodes;
-                }
-                if ui.button(tr.text("Reload profile")).clicked() && self.pending == 0 {
-                    self.send(Command::Profile);
-                }
-            });
-        });
-        card(ui, |ui| {
-            ui.strong(tr.text("Network services"));
-            ui.label(tr.message(&format!(
-                "TUN  ·  {}",
-                tr.text(service_label(&self.runtime.tun))
-            )));
-            ui.label(tr.message(&format!(
-                "Transparent proxy  ·  {}",
-                tr.text(service_label(&self.runtime.transparent))
-            )));
-        });
-    }
-
     pub(super) fn nodes(&mut self, ui: &mut egui::Ui) {
         let tr = self.translator;
         heading(ui, tr.text("Nodes"));
@@ -73,6 +9,7 @@ impl ClientApp {
                 (NodeForm::Share, tr.text("Import links")),
                 (NodeForm::Manual, tr.text("Manual node")),
                 (NodeForm::Subscription, tr.text("Add subscription")),
+                (NodeForm::Scan, tr.text("Scan QR code")),
             ] {
                 if ui
                     .selectable_label(self.form == form, tr.text(name))
@@ -92,6 +29,7 @@ impl ClientApp {
             }
         });
         ui.add_space(8.0);
+        self.group_controls(ui);
         ui.add_enabled_ui(self.pending == 0, |ui| {
             match self.form {
                 NodeForm::Share => card(ui, |ui| {
@@ -154,8 +92,14 @@ impl ClientApp {
                         self.send(command);
                     }
                 }),
+                NodeForm::Scan => self.scan_form(ui),
                 NodeForm::Manual => card(ui, |ui| self.manual_node(ui)),
                 NodeForm::None => {}
+            }
+            if self.form != NodeForm::None && ui.button(tr.text("Cancel")).clicked() {
+                self.form = NodeForm::None;
+                self.scan_job = None;
+                self.subscription_edit = None;
             }
             let mut action = self.endpoint_form(ui);
             card(ui, |ui| {
@@ -174,11 +118,12 @@ impl ClientApp {
                     self.node_page = 0;
                 }
                 let needle = self.query.trim().to_lowercase();
+                let group_filter = &self.group_filter;
                 let matches = |node: &&v2rayQ::client::NodeSummary| {
-                    needle.is_empty()
+                    groups::matches_filter(group_filter, node) && (needle.is_empty()
                         || node.name.to_lowercase().contains(&needle)
                         || node.host.to_lowercase().contains(&needle)
-                        || node.protocol.label().to_lowercase().contains(&needle)
+                        || node.protocol.label().to_lowercase().contains(&needle))
                 };
                 let filtered = self.profile.nodes.iter().filter(matches);
                 let count = self.profile.nodes.iter().filter(matches).count();
@@ -207,6 +152,14 @@ impl ClientApp {
                             ))
                             .color(MUTED),
                         );
+                        let mut group_id = node.group_id;
+                        egui::ComboBox::from_id_salt(("node_group", node.id))
+                            .selected_text(self.profile.groups.iter().find(|group| Some(group.id) == group_id).map_or(tr.text("Default group"), |group| group.name.as_str()))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut group_id, None, tr.text("Default group"));
+                                for group in &self.profile.groups { ui.selectable_value(&mut group_id, Some(group.id), &group.name); }
+                            });
+                        if group_id != node.group_id { action = Some(Command::AssignNodeGroup { node_id: node.id, group_id }); }
                         if node.subscription_id.is_some() {
                             if ui.small_button(tr.text("Make local copy")).clicked() {
                                 action = Some(Command::CopyNode { id: node.id });

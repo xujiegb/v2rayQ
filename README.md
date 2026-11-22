@@ -57,9 +57,28 @@ Both applications support Simplified Chinese, Traditional Chinese, English and F
 
 TUN and transparent proxy controls start and stop administrator-provisioned host services. The panel reflects the service manager's reported state. The installed services own their own proxy configuration, so selecting a node or editing routes in the v2rayQ profile does not reconfigure those services. See [network service setup](packaging/network/README.md).
 
+## Dashboard, groups and QR import
+
+The client's Overview puts the installed proxy service switch, current profile node, traffic slots and host IP location together. The TUN and transparent modes share the existing authorization path. The switch follows observed service status and prevents starting a second mode while the other is running. Proxy throughput remains unavailable until the custom Core adapter supplies counters; the UI displays an em dash instead of a synthetic speed.
+
+**Check IP location** sends an explicit HTTPS request from the backend host to [IP.SB](https://ip.sb/api/). No lookup runs at startup. LuCI and Cockpit therefore inspect their host, and this address may differ from a proxy exit. Lookup errors keep the panel usable.
+
+Nodes can be filtered by local origin, all subscriptions, a specific subscription or a custom group. Create, rename and remove groups, then move nodes using the row selector. Groups preserve subscription ownership; an unchanged subscription node keeps its group after a refresh. Removing a group retains its nodes. Portable export and merge include groups and memberships.
+
+The native **Scan QR code** editor reads a PNG/JPEG file path or a dropped image in a background worker. It previews recognized shares through the common importer and opens recognized HTTPS subscriptions for confirmation. Images are bounded to 8 MiB, 4096 × 4096 and a decoder allocation limit. This pass supplies image scanning; camera capture belongs to the mobile host integration.
+
+```sh
+v2rayq-cli groups
+v2rayq-cli add-group Travel
+v2rayq-cli rename-group GROUP_ID Work
+v2rayq-cli move-node NODE_ID GROUP_ID
+v2rayq-cli delete-group GROUP_ID
+v2rayq-cli inspect-network
+```
+
 ## Server panel
 
-Overview and System display persisted configuration counts and local host information. Inbounds, Users, Outbounds, Nodes, Services, TLS, REALITY, Routes, DNS, Administrators and Settings store independent drafts in `server.redb`. The Nodes editor shows fields by protocol and supports references to profile names in the separate TLS and REALITY sections. TLS drafts hold certificate paths and ALPN. REALITY drafts hold handshake parameters and keys. An optional JSON view preserves additional draft settings. The external Core adapter is pending. Draft records do not configure a running Core or create active administrator accounts.
+Overview and System display persisted configuration counts and local host information. Inbounds, Users, Outbounds, Nodes, Services, TLS, REALITY, Routes, DNS, Administrators and Settings store independent drafts in `server.redb`. The Nodes editor shows fields by protocol and supports references to profile names in the separate TLS and REALITY sections. TLS drafts hold certificate paths and ALPN. REALITY drafts hold handshake parameters and keys. An optional JSON view preserves additional draft settings. The overview links the security → endpoint → user/service workflow. Record lists support search; unsaved forms prompt before navigation, retain values during language changes, and disable editing during save. Inbound and outbound drafts offer protocol and TLS/REALITY profile selectors. The external Core adapter is pending. Draft records do not configure a running Core or create active administrator accounts.
 
 ## Source layout
 
@@ -67,11 +86,13 @@ Overview and System display persisted configuration counts and local host inform
 | --- | --- |
 | Client operations, parsers, model and native theme | `src/client`, `src/parser`, `src/model`, `apps/client/src/ui` |
 | Shared lightweight Web, Cockpit and LuCI client UI | `frontends/luci/htdocs/luci-static/resources/v2rayq` |
+| Native dashboard, groups and QR UI | `apps/client/src/ui/dashboard.rs`, `groups.rs`, `scan.rs` |
+| QR image decoding without graphics dependencies | `crates/qr` |
 | Server configuration and styling | `apps/server/src/config.rs`, `frontends/web/server.*` |
 | Loopback transport and persistence | `crates/http-preview`, `crates/storage` |
 | Separate client/server language catalogs and resource embedding | `locales/client`, `locales/server`, `locales/embed.rs`, `crates/i18n` |
 
-Visual and interaction references include [Surge](https://nssurge.com/), [VX](https://github.com/5VNetwork/VX), [v2rayN](https://github.com/2dust/v2rayN), [Passwall](https://github.com/Openwrt-Passwall/openwrt-passwall), [S-UI](https://github.com/alireza0/s-ui) and [ShellClash](https://github.com/Kuingsmile/ShellClash).
+Visual and interaction references include [Surge](https://nssurge.com/), [VX](https://github.com/5VNetwork/VX), [v2rayN](https://github.com/2dust/v2rayN), [Passwall](https://github.com/Openwrt-Passwall/openwrt-passwall), [S-UI](https://github.com/alireza0/s-ui) and [ShellClash](https://github.com/Kuingsmile/ShellClash), and [3x-ui](https://github.com/MHSanaei/3x-ui). Client surfaces use compact blue navigation, a connection card and calm status typography; server surfaces use a dark rail, teal accents, metric cards and searchable configuration lists. Styling remains plain CSS and small egui view modules.
 
 ## Validation
 
@@ -83,4 +104,5 @@ python3 tools/test_panel_api.py
 python3 tools/check_locales.py
 python3 tools/check_ui_parity.py
 python3 tools/check_workspace_boundaries.py
+cargo test --locked -p v2rayq-qr
 ```

@@ -117,5 +117,19 @@
   "Use a JSON array of up to 1,000 objects": "Utilisez un tableau JSON de 1 000 objets maximum",
   "Use one JSON object": "Utilisez un objet JSON",
   "Invalid draft revision": "Version du brouillon invalide",
-  "Command exceeds 8 MiB": "La commande dépasse 8 Mio"
+  "Command exceeds 8 MiB": "La commande dépasse 8 Mio",
+  "Server workspace": "Espace serveur",
+  "Configure with clarity.": "Configurez en toute clarté.",
+  "Review your endpoints, security profiles and users in one place.": "Gérez vos connexions, profils de sécurité et utilisateurs.",
+  "Configuration workflow": "Parcours de configuration",
+  "Add TLS certificates or a REALITY profile.": "Ajoutez des certificats TLS ou un profil REALITY.",
+  "Configure inbounds, outbounds and nodes.": "Configurez les entrées, sorties et nœuds.",
+  "Review users and save your service drafts.": "Vérifiez les utilisateurs et enregistrez les brouillons.",
+  "Discard unsaved changes?": "Abandonner les modifications ?",
+  "Search records": "Rechercher",
+  "No records yet. Add one to get started.": "Aucune configuration. Ajoutez-en une pour commencer.",
+  "Disabled": "Désactivé",
+  "Inbound name": "Nom de l’entrée",
+  "Node name": "Nom du nœud",
+  "Credential": "Identifiant"
 }

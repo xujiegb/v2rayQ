@@ -117,5 +117,19 @@
   "Use a JSON array of up to 1,000 objects": "请使用最多包含 1,000 个对象的 JSON 数组",
   "Use one JSON object": "请使用一个 JSON 对象",
   "Invalid draft revision": "草稿版本无效",
-  "Command exceeds 8 MiB": "命令超过 8 MiB"
+  "Command exceeds 8 MiB": "命令超过 8 MiB",
+  "Server workspace": "服务端工作台",
+  "Configure with clarity.": "配置清晰，管理有序。",
+  "Review your endpoints, security profiles and users in one place.": "集中管理连接端点、安全配置和用户。",
+  "Configuration workflow": "配置流程",
+  "Add TLS certificates or a REALITY profile.": "添加 TLS 证书或 REALITY 配置。",
+  "Configure inbounds, outbounds and nodes.": "配置入站、出站及节点。",
+  "Review users and save your service drafts.": "检查用户并保存服务配置草稿。",
+  "Discard unsaved changes?": "放弃尚未保存的修改？",
+  "Search records": "搜索配置",
+  "No records yet. Add one to get started.": "暂无配置，添加一条开始设置。",
+  "Disabled": "已停用",
+  "Inbound name": "入站名称",
+  "Node name": "节点名称",
+  "Credential": "凭据"
 }

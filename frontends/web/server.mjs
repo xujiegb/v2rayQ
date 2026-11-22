@@ -24,6 +24,9 @@ const notice = document.getElementById("notice");
 const view = document.getElementById("view");
 let send;
 let active = 0;
+let dirty = false;
+let savingPage = false;
+window.addEventListener("beforeunload", event => { if (dirty) { event.preventDefault(); event.returnValue = ""; } });
 
 function element(tag, className = "", text) {
   const node = document.createElement(tag);
@@ -61,13 +64,36 @@ function infoRow(name, value) {
 }
 
 function overview(status) {
+  const hero = element("section", "server-hero");
+  const copy = element("div");
+  copy.append(localizedElement("span", "eyebrow", "Server workspace"),
+    localizedElement("h2", "", "Configure with clarity."),
+    localizedElement("p", "", "Review your endpoints, security profiles and users in one place."));
+  const badge = localizedElement("span", "core-badge", status.core_connected ? "Connected" : "Awaiting adapter");
+  hero.append(copy, badge);
   const topline = element("div", "metrics");
-  for (const [key, label] of [["inbounds", "Inbounds"], ["users", "Users"], ["outbounds", "Outbounds"], ["nodes", "Nodes"]]) {
+  for (const [key, label, glyph] of [["inbounds", "Inbounds", "⇥"], ["users", "Users", "♙"], ["outbounds", "Outbounds", "⇤"], ["nodes", "Nodes", "◇"]]) {
     const count = panel(label, element("strong", "metric", String(status.counts[key])));
+    count.prepend(element("span", "metric-icon", glyph));
     count.append(button("Open", () => open(key)));
     topline.append(count);
   }
-  return [topline, panel("Deployment",
+  const setup = panel("Configuration workflow");
+  const steps = [
+    ["01", "Security", "Add TLS certificates or a REALITY profile.", [["tls", "TLS"], ["reality", "REALITY"]]],
+    ["02", "Endpoints", "Configure inbounds, outbounds and nodes.", [["inbounds", "Inbounds"], ["nodes", "Nodes"]]],
+    ["03", "Users", "Review users and save your service drafts.", [["users", "Users"], ["services", "Services"]]]
+  ];
+  for (const [number, title, description, links] of steps) {
+    const row = element("div", "workflow-step");
+    const copy = element("div");
+    copy.append(localizedElement("strong", "", title), localizedElement("p", "", description));
+    const actions = element("div", "actions");
+    for (const [key, label] of links) actions.append(button(label, () => open(key)));
+    row.append(element("span", "step-number", number), copy, actions);
+    setup.append(row);
+  }
+  return [hero, topline, setup, panel("Deployment",
     infoRow("Core connection", status.core_connected ? "Connected" : "Awaiting adapter"),
     infoRow("Configuration", "Saved drafts"),
     infoRow("Administrative access", "Local launch session or Cockpit"))];
@@ -84,6 +110,7 @@ function editor(section, title, draft, profiles = {}) {
   textarea.setAttribute("aria-label", i18n.text(title));
   textarea.dataset.i18nLabel = title;
   textarea.spellcheck = false;
+  textarea.oninput = () => { dirty = true; };
   advanced.append(localizedElement("summary", "", "Edit JSON"), textarea);
   const label = localizedElement("h2", "", "Edit configuration");
   const edit = element("section", "panel edit");
@@ -103,7 +130,7 @@ function editor(section, title, draft, profiles = {}) {
       if (!input) continue;
       const [parent, allowed] = visible;
       input.disabled = !allowed.includes(value(parent));
-      if (parent === "transport" && !["vless", "vmess", "trojan"].includes(value("protocol"))) input.disabled = true;
+      if (parent === "transport" && !["vless", "vmess", "trojan"].includes(value("protocol") || value("type"))) input.disabled = true;
       input.parentElement.hidden = input.disabled;
     }
     const options = inputs.querySelector("datalist");
@@ -155,11 +182,12 @@ function editor(section, title, draft, profiles = {}) {
         if (kind === "profile") input.setAttribute("list", "security-profiles");
         input.value = Array.isArray(value) ? value.join(", ") : value ?? "";
       }
-      input.oninput = () => { input.dataset.edited = "true"; if (select) refreshFields(); };
+      input.oninput = () => { input.dataset.edited = "true"; dirty = true; if (select) refreshFields(); };
+      input.onchange = input.oninput;
       wrapper.append(input);
       inputs.append(wrapper);
     }
-    if (section === "nodes") {
+    if (["nodes", "inbounds", "outbounds"].includes(section)) {
       const options = element("datalist");
       options.id = "security-profiles";
       inputs.append(options);
@@ -216,6 +244,8 @@ function editor(section, title, draft, profiles = {}) {
 
   function start(value, position) {
     if (saving) return;
+    if (dirty && !window.confirm(i18n.text("Discard unsaved changes?"))) return;
+    dirty = false;
     index = position;
     current = value;
     advanced.open = false;
@@ -229,10 +259,14 @@ function editor(section, title, draft, profiles = {}) {
   async function save(value) {
     if (saving) return;
     saving = true;
+    savingPage = true;
+    inputs.disabled = true;
+    textarea.disabled = true;
     controls.querySelectorAll("button").forEach(control => { control.disabled = true; });
     try {
       const result = await send({ action: "save", section, revision: draft.revision, value });
       draft = { revision: result.revision, value };
+      dirty = false;
       if (!layout.isConnected) return;
       notice.textContent = i18n.text("Draft saved.");
       if (isList) { edit.hidden = true; drawList(); }
@@ -241,15 +275,32 @@ function editor(section, title, draft, profiles = {}) {
       if (layout.isConnected) notice.textContent = i18n.message(error.message);
     } finally {
       saving = false;
+      savingPage = false;
+      inputs.disabled = false;
+      textarea.disabled = false;
       controls.querySelectorAll("button").forEach(control => { control.disabled = false; });
     }
   }
 
+  let query = "";
   function drawList() {
     const header = element("div", "list-header");
     header.append(localizedElement("h2", "", "{count} saved records", { count: draft.value.length }),
       button("Add record", () => start(defaults[section] || {}, null), "primary"));
-    list.replaceChildren(header);
+    const search = element("input", "record-search");
+    search.type = "search";
+    search.placeholder = i18n.text("Search records");
+    search.setAttribute("aria-label", i18n.text("Search records"));
+    search.dataset.i18nPlaceholder = "Search records";
+    search.dataset.i18nLabel = "Search records";
+    search.value = query;
+    const rows = element("div", "record-rows");
+    search.oninput = () => {
+      query = search.value;
+      for (const row of rows.children) row.hidden = !row.dataset.search.includes(query.trim().toLowerCase());
+    };
+    list.replaceChildren(header, search, rows);
+    if (!draft.value.length) list.append(localizedElement("p", "empty-state", "No records yet. Add one to get started."));
     draft.value.forEach((record, i) => {
       const row = element("div", "info-row");
       const candidate = record.name || record.tag || record.username || record.outbound;
@@ -269,15 +320,21 @@ function editor(section, title, draft, profiles = {}) {
           .filter(value => typeof value === "string" && value).join(" · ");
         if (summary) details.append(element("small", "", summary));
       }
+      row.dataset.search = [name, record.type, record.protocol, record.server, record.listen, record.username].filter(value => typeof value === "string").join(" ").toLowerCase();
+      row.hidden = !row.dataset.search.includes(query.trim().toLowerCase());
+      if (typeof record.enabled === "boolean") details.append(localizedElement("small", "record-state", record.enabled ? "Enabled" : "Disabled"));
       row.append(details, operations);
-      list.append(row);
+      rows.append(row);
     });
   }
 
   const submit = button("Save draft", null, "primary");
   submit.type = "submit";
   controls.append(submit);
-  if (isList) controls.append(button("Cancel", () => { edit.hidden = true; }));
+  if (isList) controls.append(button("Cancel", () => {
+    if (dirty && !window.confirm(i18n.text("Discard unsaved changes?"))) return;
+    dirty = false; edit.hidden = true;
+  }));
   form.append(inputs, advanced, controls);
   form.onsubmit = event => {
     event.preventDefault();
@@ -304,6 +361,9 @@ function editor(section, title, draft, profiles = {}) {
 }
 
 async function open(key) {
+  if (savingPage) return;
+  if (dirty && !window.confirm(i18n.text("Discard unsaved changes?"))) return;
+  dirty = false;
   const request = ++active;
   const page = serverPages.find(([id]) => id === key);
   i18n.bind(heading, page[1]);
@@ -316,7 +376,7 @@ async function open(key) {
   try {
     const command = key === "overview" || key === "system" ? { action: key } : { action: "load", section: key };
     const [value, profiles] = await Promise.all([
-      send(command), key === "nodes" ? send({ action: "security_profiles" }) : undefined
+      send(command), ["nodes", "inbounds", "outbounds"].includes(key) ? send({ action: "security_profiles" }) : undefined
     ]);
     if (request !== active) return;
     if (key === "overview") view.append(...overview(value));

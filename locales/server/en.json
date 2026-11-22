@@ -117,5 +117,19 @@
   "Use a JSON array of up to 1,000 objects": "Use a JSON array of up to 1,000 objects",
   "Use one JSON object": "Use one JSON object",
   "Invalid draft revision": "Invalid draft revision",
-  "Command exceeds 8 MiB": "Command exceeds 8 MiB"
+  "Command exceeds 8 MiB": "Command exceeds 8 MiB",
+  "Server workspace": "Server workspace",
+  "Configure with clarity.": "Configure with clarity.",
+  "Review your endpoints, security profiles and users in one place.": "Review your endpoints, security profiles and users in one place.",
+  "Configuration workflow": "Configuration workflow",
+  "Add TLS certificates or a REALITY profile.": "Add TLS certificates or a REALITY profile.",
+  "Configure inbounds, outbounds and nodes.": "Configure inbounds, outbounds and nodes.",
+  "Review users and save your service drafts.": "Review users and save your service drafts.",
+  "Discard unsaved changes?": "Discard unsaved changes?",
+  "Search records": "Search records",
+  "No records yet. Add one to get started.": "No records yet. Add one to get started.",
+  "Disabled": "Disabled",
+  "Inbound name": "Inbound name",
+  "Node name": "Node name",
+  "Credential": "Credential"
 }

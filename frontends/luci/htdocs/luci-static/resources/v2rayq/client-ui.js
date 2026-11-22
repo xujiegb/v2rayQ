@@ -77,7 +77,8 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
 
   const state = {
     page: "overview", form: "", busy: false, profile: null, runtime: {}, query: "", nodePage: 0,
-    editingNode: null, editingSubscription: null, editingRule: undefined, routingDraft: null, configuration: "", usePreferences: false
+    editingNode: null, editingSubscription: null, editingRule: undefined, routingDraft: null, configuration: "", usePreferences: false,
+    groupFilter: "", groupEdit: null, groupName: "", proxyMode: "tun", ipInfo: null
   };
   const rail = element("aside", "vq-rail");
   const brand = element("div", "vq-brand");
@@ -103,7 +104,9 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
         state.profile = response.profile;
         await i18n.use(response.profile.settings.language);
       }
+      if (command.action === "set_network") state.ipInfo = null;
       if (response.runtime) state.runtime = response.runtime;
+      if (response.ip_info) state.ipInfo = response.ip_info;
       notice.textContent = i18n.message(response.message || "");
       if (response.merge) notice.textContent = i18n.format("{nodes} nodes · {subscriptions} subscriptions · {rules} rules · {duplicates} duplicates", response.merge);
       onSuccess?.(response);
@@ -127,15 +130,93 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
 
   function summary(profile) {
     const selected = profile.nodes.find(node => node.id === profile.selected_node);
+    const status = state.runtime[state.proxyMode] || {};
+    const other = state.runtime[state.proxyMode === "tun" ? "transparent" : "tun"] || {};
+    const running = status.running === true;
+    const controls = element("div", "vq-connection-control");
+    const mode = field("Proxy mode", "proxy-mode", { choices: services, value: state.proxyMode });
+    mode.lastChild.onchange = event => { state.proxyMode = event.target.value; render(); };
+    const toggle = button(running ? "Turn off proxy" : "Turn on proxy",
+      () => perform({ action: "set_network", mode: state.proxyMode, enabled: !running }), "vq-switch");
+    toggle.setAttribute("role", "switch");
+    toggle.setAttribute("aria-checked", String(running));
+    toggle.disabled = !(status.can_change || (delegatedControl && status.installed)) || (!running && other.running === true);
+    const stateLabel = element("span", "vq-status" + (running ? " vq-online" : ""), serviceLabel(status));
+    controls.append(mode, stateLabel, toggle, button("Refresh status", () => perform({ action: "status" })));
+    const connection = card("Proxy", controls,
+      element("p", "vq-hint", i18n.text("Controls the installed host service. Node changes await the Core adapter.")));
+    if (!running && other.running === true) connection.append(element("p", "", i18n.text("Stop the other mode before switching.")));
     const hero = element("section", "vq-hero");
-    hero.append(element("div", "vq-hero-kicker", i18n.text("Selected node")),
+    const source = profile.subscriptions.find(item => item.id === selected?.subscription_id)?.name || i18n.text("Local nodes");
+    hero.append(element("div", "vq-hero-kicker", i18n.text("Current node")),
       element("h2", "", selected?.name || i18n.text("Choose a node")),
-      element("p", "", selected ? `${protocols[selected.protocol]} · ${endpoint(selected)}` : i18n.text("Import a share link or configure an endpoint.")),
+      element("p", "", selected ? protocols[selected.protocol] + " · " + endpoint(selected) + " · " + source : i18n.text("Import a share link or configure an endpoint.")),
       button("Manage nodes", () => navigate("nodes"), "vq-light"));
-    const grid = element("div", "vq-grid");
-    grid.append(card("Profile", row(i18n.text("Nodes"), String(profile.nodes.length)), row(i18n.text("Subscriptions"), String(profile.subscriptions.length))),
-      card("Network services", ...Object.entries(services).map(([key, title]) => row(i18n.text(title), serviceLabel(state.runtime[key])))));
-    return [hero, grid];
+    const traffic = element("div", "vq-traffic");
+    for (const [key, label, glyph] of [["download_bps", "Download", "↓"], ["upload_bps", "Upload", "↑"]]) {
+      const tile = element("div", "vq-speed");
+      const value = state.runtime.traffic?.[key];
+      const speed = typeof value === "number" && Number.isFinite(value) && value >= 0
+        ? value >= 1048576 ? (value / 1048576).toFixed(1) + " MiB/s" : value >= 1024 ? (value / 1024).toFixed(1) + " KiB/s" : value + " B/s"
+        : "—";
+      tile.append(element("span", "vq-speed-label", glyph + " " + i18n.text(label)), element("strong", "", speed));
+      traffic.append(tile);
+    }
+    const trafficCard = card("Live traffic", traffic);
+    if (!state.runtime.traffic?.core_connected) trafficCard.append(element("p", "vq-hint", i18n.text("Traffic statistics await the Core adapter.")));
+    const ip = state.ipInfo;
+    const network = card("Host public IP", element("strong", "vq-ip", ip?.ip || i18n.text("Not checked")),
+      element("p", "", [ip?.city, ip?.region, ip?.country].filter(Boolean).join(" · ")),
+      ...(ip?.isp ? [element("p", "", ip.isp)] : []),
+      button("Check IP location", () => perform({ action: "inspect_network" })),
+      element("p", "vq-hint", i18n.text("Checked on demand via IP.SB from the backend host; it may differ from the proxy exit.")));
+    const grid = element("div", "vq-dashboard-grid");
+    grid.append(trafficCard, network);
+    return [element("p", "vq-page-intro", i18n.text("Your connection, at a glance.")), connection, hero, grid];
+  }
+
+  function groupPanel(profile) {
+    const groups = profile.groups || [];
+    const wrapper = element("div", "vq-group-manager");
+    const choices = { "": i18n.text("All nodes"), local: i18n.text("Local nodes"), subscriptions: i18n.text("Subscriptions") };
+    for (const group of groups) choices[group.id] = group.name + " · " + group.node_count;
+    for (const item of profile.subscriptions) choices["subscription:" + item.id] = item.name;
+    if (!(state.groupFilter in choices)) state.groupFilter = "";
+    const filter = field("Node groups", "group-filter", { choices, value: state.groupFilter });
+    filter.lastChild.onchange = event => { state.groupFilter = event.target.value; state.nodePage = 0; render(); };
+    const name = field("Group name", "group-name", { value: state.groupName, required: true });
+    name.lastChild.maxLength = 256;
+    name.oninput = () => { state.groupName = name.lastChild.value; };
+    const form = element("form", "vq-group-form");
+    const submit = button(state.groupEdit ? "Save group" : "Add group", null, "vq-primary");
+    submit.type = "submit";
+    form.append(name, submit);
+    if (state.groupEdit) form.append(button("Cancel", () => { state.groupEdit = null; state.groupName = ""; render(); }));
+    form.onsubmit = event => {
+      event.preventDefault();
+      perform({ action: "save_node_group", id: state.groupEdit, name: state.groupName },
+        () => { state.groupEdit = null; state.groupName = ""; });
+    };
+    const rows = groups.map(group => row(group.name, i18n.format("{count} nodes", { count: group.node_count }),
+      button("Rename group", () => { state.groupEdit = group.id; state.groupName = group.name; render(); }),
+      button("Remove group", () => perform({ action: "remove_node_group", id: group.id }, () => {
+        if (state.groupFilter === group.id) state.groupFilter = "";
+        if (state.groupEdit === group.id) { state.groupEdit = null; state.groupName = ""; }
+      }))));
+    const details = element("details", "vq-group-details");
+    details.append(element("summary", "", i18n.text("Manage groups")), form, ...rows,
+      element("p", "vq-hint", i18n.text("Removing a group keeps its nodes.")));
+    wrapper.append(filter, details);
+    return card("", wrapper);
+  }
+
+  function groupMatches(node) {
+    const filter = state.groupFilter;
+    if (!filter) return true;
+    if (filter === "local") return !node.subscription_id;
+    if (filter === "subscriptions") return Boolean(node.subscription_id);
+    if (filter.startsWith("subscription:")) return node.subscription_id === filter.slice(13);
+    return node.group_id === filter;
   }
 
   function shareForm() {
@@ -175,6 +256,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
       event.preventDefault();
       perform({ action: "import_nodes", content: text.value }, () => { state.form = ""; });
     };
+    form.append(button("Cancel", () => { state.form = ""; render(); }));
     return card("Import share links", form);
   }
 
@@ -195,6 +277,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     };
     const editor = card(subscription ? "Edit subscription" : "New subscription", form);
     editor.dataset.editor = "subscription";
+    form.append(button("Cancel", () => { state.form = ""; state.editingSubscription = null; render(); }));
     return editor;
   }
 
@@ -238,7 +321,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     form.append(protocol, field("Name", "name", { required: true }), field("Server", "host", { required: true }),
       field("Port", "port", { value: "443", numeric: true, required: true }), credential, cipher, tls, sni, advanced);
     updateProtocol();
-    form.append(submit);
+    form.append(submit, button("Cancel", () => { state.form = ""; render(); }));
     form.onsubmit = event => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(form));
@@ -298,8 +381,8 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     const pageSize = 30;
     function showNodes() {
       const query = state.query.trim().toLowerCase();
-      const matches = query ? profile.nodes.filter(node =>
-        [node.name, endpoint(node), protocols[node.protocol]].some(value => value.toLowerCase().includes(query))) : profile.nodes;
+      const matches = profile.nodes.filter(node => groupMatches(node) && (!query ||
+        [node.name, endpoint(node), protocols[node.protocol]].some(value => value.toLowerCase().includes(query))));
       const totalPages = Math.max(1, Math.ceil(matches.length / pageSize));
       state.nodePage = Math.min(state.nodePage, totalPages - 1);
       const start = state.nodePage * pageSize;
@@ -312,10 +395,15 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
         const edit = node.subscription_id
           ? button("Make local copy", () => perform({ action: "copy_node", id: node.id }))
           : button("Edit endpoint", () => openNodeEditor(node.id));
-        return row(node.name, detail, select, edit,
-          button("Delete", () => perform({ action: "remove_node", id: node.id }, () => {
-            if (state.editingNode === node.id) state.editingNode = null;
-          }), "vq-delete"));
+        const group = field("Move to group", "node-group", { choices: Object.fromEntries([["", i18n.text("Default group")], ...(profile.groups || []).map(item => [item.id, item.name])]), value: node.group_id || "" });
+        group.lastChild.setAttribute("aria-label", i18n.format("Group for {name}", { name: node.name }));
+        group.lastChild.onchange = event => perform({ action: "assign_node_group", node_id: node.id, group_id: event.target.value || null });
+        return row(node.name, detail, group, select, edit,
+          button("Delete", () => {
+            if (window.confirm(i18n.format("Delete {name}?", { name: node.name }))) perform({ action: "remove_node", id: node.id }, () => {
+              if (state.editingNode === node.id) state.editingNode = null;
+            });
+          }, "vq-delete"));
       }));
       if (!matches.length) nodeRows.append(element("p", "", i18n.text(query ? "No matching nodes." : "No nodes saved.")));
       const nodeCount = i18n.format(matches.length === 1 ? "{count} node" : "{count} nodes", { count: matches.length });
@@ -359,7 +447,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     const edited = profile.nodes.find(node => node.id === state.editingNode);
     const subscription = profile.subscriptions.find(item => item.id === state.editingSubscription);
     const forms = { share: shareForm, subscription: () => subscriptionForm(subscription), manual: manualForm };
-    return [actions, ...(state.form ? [forms[state.form]()] : []), ...(edited ? [endpointForm(edited)] : []),
+    return [actions, groupPanel(profile), ...(state.form ? [forms[state.form]()] : []), ...(edited ? [endpointForm(edited)] : []),
       card("Saved nodes", search, nodeRows, pagination),
       card("Subscriptions", ...(subscriptions.length ? subscriptions : [element("p", "", i18n.text("No subscriptions saved."))]))];
   }

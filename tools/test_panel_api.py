@@ -180,3 +180,30 @@ with tempfile.TemporaryDirectory() as directory:
         settings = command(port, token, {"action": "load", "section": "settings"})[1]["result"]
         assert settings == {"revision": 1, "value": {"name": "Example"}}
 print("Portable configuration preview, idempotent merge and independent language preferences: OK")
+
+
+with tempfile.TemporaryDirectory() as directory:
+    env = {**os.environ, "V2RAYQ_CLIENT_DB": f"{directory}/groups.redb"}
+    with launch("v2rayq-web-client", env) as (port, token):
+        result = command(port, token, {"action": "add_link", "link": SHARE})[1]["result"]
+        node = result["profile"]["nodes"][0]["id"]
+        result = command(port, token, {"action": "save_node_group", "id": None, "name": "Travel"})[1]["result"]
+        group = result["profile"]["groups"][0]["id"]
+        result = command(port, token, {"action": "assign_node_group", "node_id": node, "group_id": group})[1]["result"]
+        assert result["profile"]["nodes"][0]["group_id"] == group
+        assert result["profile"]["groups"][0]["node_count"] == 1
+        assert "error" in command(port, token, {"action": "save_node_group", "id": None, "name": "travel"})[1]
+        exported = command(port, token, {"action": "export_configuration"})[1]["result"]["configuration"]
+        command(port, token, {"action": "remove_node_group", "id": group})
+        profile = command(port, token, {"action": "profile"})[1]["result"]["profile"]
+        assert len(profile["nodes"]) == 1 and profile["nodes"][0]["group_id"] is None
+        assert profile["groups"] == []
+        command(port, token, {"action": "merge_configuration", "content": exported})
+        profile = command(port, token, {"action": "profile"})[1]["result"]["profile"]
+        assert len(profile["groups"]) == 1 and profile["groups"][0]["node_count"] == 1
+        assert profile["nodes"][0]["group_id"] == profile["groups"][0]["id"]
+        command(port, token, {"action": "merge_configuration", "content": exported})
+        assert len(command(port, token, {"action": "profile"})[1]["result"]["profile"]["groups"]) == 1
+        runtime = command(port, token, {"action": "status"})[1]["result"]["runtime"]
+        assert runtime["traffic"] == {"core_connected": False, "upload_bps": None, "download_bps": None}
+print("Node group lifecycle, configuration membership and unavailable telemetry: OK")
