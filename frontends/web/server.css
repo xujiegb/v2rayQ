@@ -54,3 +54,5 @@ textarea { width: 100%; min-height: 200px; padding: 10px; margin-bottom: 8px; re
 .editor-field select { border: 1px solid var(--edge); border-radius: 7px; width: 100%; padding: 7px 10px; font: inherit; color: var(--ink); background: #f9fbfe; }
 .editor-field select:focus-visible { outline: 2px solid #23a89b; outline-offset: 2px; }
 .record-title small { display: block; color: var(--muted); }
+.language-control { display: grid; gap: 5px; color: #c9d8ed; padding: 0 7px; margin-bottom: 18px; font-size: 13px; }
+.language-control select { font: inherit; border: 1px solid #466078; border-radius: 7px; padding: 5px 8px; color: #eff6ff; background: #21334e; width: 100%; }

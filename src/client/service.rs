@@ -7,6 +7,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::configuration::{Configuration, MergeSummary};
 use super::import::Import;
 use super::manual::node_endpoint;
 use super::runtime::{self, NetworkMode, Runtime};
@@ -27,6 +28,14 @@ pub enum Access {
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Command {
     Profile,
+    ExportConfiguration,
+    MergeConfiguration {
+        content: String,
+        #[serde(default)]
+        use_preferences: bool,
+        #[serde(default)]
+        preview: bool,
+    },
     PreviewImport {
         content: String,
     },
@@ -84,6 +93,9 @@ pub enum Command {
         id: Uuid,
         direction: RuleDirection,
     },
+    SaveLanguage {
+        language: String,
+    },
     Status,
     SetNetwork {
         mode: NetworkMode,
@@ -120,6 +132,10 @@ pub struct SubscriptionSummary {
 
 #[derive(Default, Deserialize, Serialize)]
 pub struct Reply {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub configuration: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge: Option<MergeSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<Profile>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -163,6 +179,38 @@ impl ClientService {
                 let data = ClientData::load(&self.path).map_err(|error| error.to_string())?;
                 Ok(Reply {
                     profile: Some(data.into()),
+                    ..Reply::default()
+                })
+            }
+            Command::ExportConfiguration => {
+                let data = ClientData::load(&self.path).map_err(|error| error.to_string())?;
+                Ok(Reply {
+                    configuration: Some(Configuration::export(data)?),
+                    ..Reply::default()
+                })
+            }
+            Command::MergeConfiguration {
+                content,
+                use_preferences,
+                preview,
+            } => {
+                let config = Configuration::parse(&content)?;
+                if preview {
+                    let mut data =
+                        ClientData::load(&self.path).map_err(|error| error.to_string())?;
+                    return Ok(Reply {
+                        merge: Some(config.merge(&mut data, use_preferences)?),
+                        ..Reply::default()
+                    });
+                }
+                let (profile, summary) = self.update(|data| {
+                    let summary = config.merge(data, use_preferences)?;
+                    Ok((Profile::from_data(data), summary))
+                })?;
+                Ok(Reply {
+                    profile: Some(profile),
+                    merge: Some(summary),
+                    message: Some("Configuration merged".into()),
                     ..Reply::default()
                 })
             }
@@ -335,6 +383,18 @@ fn edit_profile(data: &mut ClientData, action: Command) -> Result<&'static str, 
         Command::RemoveSubscription { id } => {
             data.remove_subscription(id);
             Ok("Subscription deleted")
+        }
+        Command::SaveLanguage { language } => {
+            if !language.is_empty()
+                && !super::language::RESOURCES
+                    .languages()
+                    .iter()
+                    .any(|item| item.code == language)
+            {
+                return Err("Unsupported language".into());
+            }
+            data.settings.language = language;
+            Ok("Language saved")
         }
         Command::SaveRouting {
             route_mode,

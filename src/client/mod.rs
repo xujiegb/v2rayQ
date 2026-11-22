@@ -1,9 +1,12 @@
 //! Client profile storage and operations shared by every frontend.
+mod configuration;
 mod import;
+pub mod language;
 mod manual;
 pub mod runtime;
 mod service;
 
+pub use configuration::MergeSummary;
 pub use manual::{ManualNode, ManualTransport, ProtocolKind};
 pub use service::{Access, ClientService, Command, NodeSummary, Profile, Reply};
 use std::{

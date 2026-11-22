@@ -7,23 +7,10 @@ use std::{
 };
 
 use serde_json::{Value, json};
-use v2rayQ::client::{Access, ClientService, Command, Reply, runtime::ServiceStatus};
-
-const HELP: &str = "v2rayq-cli
-  status | nodes | subscriptions | routes
-  import | preview-import           Read share links or a base64 list from stdin
-  add-link                          Read one share link from stdin
-  add-node                          Read a manual node JSON object from stdin
-  subscribe NAME                    Read an HTTPS subscription URL from stdin
-  select ID | delete ID | copy-node ID
-  edit-node ID NAME HOST PORT
-  add-rule | edit-rule ID           Read rule fields as JSON from stdin
-  delete-rule ID | move-rule ID up|down
-  update-subscription ID NAME       Rename a subscription
-  replace-subscription-url ID NAME  Read a replacement HTTPS URL from stdin
-  refresh ID | unsubscribe ID
-  routing direct|global|rules [DNS]
-  tun on|off | transparent on|off";
+use v2rayQ::client::{
+    Access, ClientData, ClientService, Command, Reply, default_data_path, language,
+    runtime::ServiceStatus,
+};
 
 fn main() -> ExitCode {
     let args: Vec<_> = env::args().skip(1).collect();
@@ -59,38 +46,62 @@ fn main() -> ExitCode {
             return ExitCode::SUCCESS;
         }
     }
-    let kind: Vec<_> = args.iter().map(String::as_str).collect();
+    let mut kind: Vec<_> = args.iter().map(String::as_str).collect();
+    let explicit = if kind.first() == Some(&"--lang") && kind.len() >= 2 {
+        Some(kind.drain(..2).nth(1).unwrap_or("en"))
+    } else {
+        None
+    };
+    let path = default_data_path();
+    let saved = if path.exists() {
+        ClientData::load(&path)
+            .ok()
+            .map(|data| data.settings.language)
+    } else {
+        None
+    };
+    let requested = explicit
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .or_else(|| saved.filter(|value| !value.is_empty()))
+        .unwrap_or_else(v2rayQ::client::language::system_language);
+    let tr = language::RESOURCES.translator(&requested);
     if matches!(kind.as_slice(), [] | ["help" | "--help" | "-h"]) {
-        println!("{HELP}");
+        println!("{}", tr.text("CLI help"));
         return ExitCode::SUCCESS;
     }
     match parse(&kind).and_then(|cmd| service.call(cmd, Access::Terminal)) {
         Ok(reply) => {
-            print_reply(reply, &kind);
+            print_reply(reply, &kind, tr);
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("{error}");
+            eprintln!("{}", tr.message(&error));
             ExitCode::FAILURE
         }
     }
 }
 
 fn read_input() -> Result<String, String> {
-    const LIMIT: u64 = 128 * 1024;
+    const LIMIT: u64 = 8 * 1024 * 1024;
     let mut input = String::new();
     io::stdin()
         .take(LIMIT + 1)
         .read_to_string(&mut input)
         .map_err(|error| error.to_string())?;
     if input.len() as u64 > LIMIT {
-        return Err("Command exceeds 128 KiB".into());
+        return Err("Command exceeds 8 MiB".into());
     }
     Ok(input)
 }
 
 fn parse(args: &[&str]) -> Result<Command, String> {
     let command: Value = match args {
+        ["export-config"] => json!({ "action": "export_configuration" }),
+        ["merge-config"] | ["merge-config", "--preferences"] => json!({
+            "action": "merge_configuration", "content": read_input()?, "use_preferences": args.len() == 2
+        }),
+        ["language", language] => json!({ "action": "save_language", "language": language }),
         ["status"] => json!({ "action": "status" }),
         ["nodes" | "subscriptions" | "routes"] => json!({ "action": "profile" }),
         ["import" | "preview-import"] => {
@@ -147,13 +158,29 @@ fn parse(args: &[&str]) -> Result<Command, String> {
     serde_json::from_value(command).map_err(|_| "Invalid arguments. Run v2rayq-cli --help.".into())
 }
 
-fn print_reply(reply: Reply, args: &[&str]) {
+fn print_reply(reply: Reply, args: &[&str], tr: language::Translator) {
+    if let Some(config) = reply.configuration {
+        println!("{config}");
+    }
+    if let Some(summary) = reply.merge {
+        println!(
+            "{}",
+            tr.message(&format!(
+                "{} nodes · {} subscriptions · {} rules · {} duplicates",
+                summary.nodes, summary.subscriptions, summary.rules, summary.duplicates
+            ))
+        );
+    }
     if let Some(message) = reply.message {
-        println!("{message}");
+        println!("{}", tr.message(&message));
     }
     if let Some(status) = reply.runtime {
-        println!("TUN               {}", service_label(status.tun));
-        println!("Transparent proxy {}", service_label(status.transparent));
+        println!("TUN               {}", tr.text(service_label(status.tun)));
+        println!(
+            "{} {}",
+            tr.text("Transparent proxy"),
+            tr.text(service_label(status.transparent))
+        );
     }
     if let Some(profile) = reply.profile {
         if args == ["nodes"] {
@@ -175,11 +202,11 @@ fn print_reply(reply: Reply, args: &[&str]) {
         } else if args == ["subscriptions"] {
             for item in profile.subscriptions {
                 println!(
-                    "{}  {}  {} nodes  {}",
+                    "{}  {}  {}  {}",
                     item.id,
                     terminal_text(&item.name),
-                    item.node_count,
-                    item.last_error.as_deref().unwrap_or("Ready")
+                    tr.message(&format!("{} nodes", item.node_count)),
+                    tr.text(item.last_error.as_deref().unwrap_or("Ready"))
                 );
             }
         } else if args == ["routes"] {
@@ -188,9 +215,9 @@ fn print_reply(reply: Reply, args: &[&str]) {
                     "{}  {}  {}  {} → {}",
                     index + 1,
                     rule.id,
-                    rule.fields.kind.label(),
+                    tr.text(rule.fields.kind.label()),
                     terminal_text(&rule.fields.value),
-                    rule.fields.target.label()
+                    tr.text(rule.fields.target.label())
                 );
             }
         }

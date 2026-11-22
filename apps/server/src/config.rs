@@ -85,6 +85,10 @@ enum Command {
     Overview,
     System,
     SecurityProfiles,
+    Language,
+    SaveLanguage {
+        language: String,
+    },
     Load {
         section: Section,
     },
@@ -132,6 +136,21 @@ fn run(command: Command) -> v2rayq_storage::StorageResult<Value> {
                 counts.insert(name.into(), json!(count));
             }
             Ok(json!({ "counts": counts, "core_connected": false }))
+        }
+        Command::Language => {
+            Ok(json!({ "language": store.get::<String>("panel/language")?.unwrap_or_default() }))
+        }
+        Command::SaveLanguage { language } => {
+            if !language.is_empty()
+                && !crate::language::RESOURCES
+                    .languages()
+                    .iter()
+                    .any(|item| item.code == language)
+            {
+                return Err("Unsupported language".into());
+            }
+            store.put("panel/language", &language)?;
+            Ok(json!({}))
         }
         Command::SecurityProfiles => Ok(json!({
             "tls": profile_names(&store, Section::Tls)?,

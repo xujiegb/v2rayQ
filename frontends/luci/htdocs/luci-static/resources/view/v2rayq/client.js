@@ -22,7 +22,7 @@ return view.extend({
             const reply = await call(JSON.stringify(command));
             if (reply.error) throw new Error(reply.error);
             return reply.result;
-        }, { delegatedControl: canControl === true });
+        }, { delegatedControl: canControl === true }).catch(error => { root.textContent = error.message; });
         return E('div', {}, [E('link', { rel: 'stylesheet', href: L.resource('v2rayq/client.css') }), root]);
     },
 

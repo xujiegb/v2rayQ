@@ -6,6 +6,7 @@ members = [
     "apps/server",
     "apps/web-client",
     "crates/contracts",
+    "crates/i18n",
     "crates/http-preview",
     "crates/storage",
 ]
@@ -43,3 +44,7 @@ url = "2"
 ureq = "3.5.2"
 uuid = { version = "1", features = ["v4", "serde"] }
 v2rayq-storage = { path = "crates/storage" }
+v2rayq-i18n = { path = "crates/i18n" }
+
+[build-dependencies]
+serde_json = "1"
