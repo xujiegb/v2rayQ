@@ -10,7 +10,7 @@ return view.extend({
     load: function() {
         return Promise.all([
             import(L.resource('v2rayq/client-ui.js')),
-            serviceAccess('ubus', 'v2rayq', 'service')
+            serviceAccess('ubus', 'v2rayq', 'service').catch(() => false)
         ]);
     },
 

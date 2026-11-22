@@ -62,7 +62,7 @@ jobs:
           echo "AR_aarch64_linux_android=$llvm/llvm-ar" >> "$GITHUB_ENV"
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_AR=$llvm/llvm-ar" >> "$GITHUB_ENV"
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$llvm/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
-      - run: cargo check -p v2rayq-client --no-default-features --lib --target aarch64-linux-android
+      - run: cargo check --locked -p v2rayq-client --no-default-features --lib --target aarch64-linux-android
   ios-native-ui:
     name: iOS arm64 native egui simulator bundle
     runs-on: macos-latest
@@ -72,10 +72,11 @@ jobs:
         with:
           targets: aarch64-apple-ios-sim
       - run: sh packaging/mobile/ios/build.sh aarch64-apple-ios-sim
+      - run: tar -czf dist/v2rayq-ios-simulator.tar.gz -C dist/aarch64-apple-ios-sim v2rayQ.app
       - uses: actions/upload-artifact@v4
         with:
           name: v2rayq-ios-simulator
-          path: dist/aarch64-apple-ios-sim/v2rayQ.app
+          path: dist/v2rayq-ios-simulator.tar.gz
           if-no-files-found: error
   freebsd:
     name: FreeBSD 15 native and local services

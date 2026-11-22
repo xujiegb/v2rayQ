@@ -133,8 +133,8 @@ fn print_reply(reply: Reply, args: &[&str]) {
                     "{selected}  {}  {:12}  {}  {}:{}",
                     node.id,
                     node.protocol.label(),
-                    node.name,
-                    node.host,
+                    terminal_text(&node.name),
+                    terminal_text(&node.host),
                     node.port
                 );
             }
@@ -143,12 +143,19 @@ fn print_reply(reply: Reply, args: &[&str]) {
                 println!(
                     "{}  {}  {}",
                     item.id,
-                    item.name,
+                    terminal_text(&item.name),
                     item.last_error.as_deref().unwrap_or("Ready")
                 );
             }
         }
     }
+}
+
+fn terminal_text(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_control())
+        .collect()
 }
 
 fn service_label(status: ServiceStatus) -> &'static str {

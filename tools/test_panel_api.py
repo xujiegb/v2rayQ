@@ -67,11 +67,16 @@ with tempfile.TemporaryDirectory() as directory:
         fragmented_request(port, token)
         stored = subprocess.check_output([BINARIES / "v2rayq-cli", "nodes"], env=env, text=True)
         assert "Europe" in stored and "secret" not in stored
+        terminal_link = SHARE.replace("Europe", "Terminal%1B%5B31m")
+        assert command(port, token, {"action": "add_link", "link": terminal_link})[0] == 200
+        stored = subprocess.check_output([BINARIES / "v2rayq-cli", "nodes"], env=env, text=True)
+        assert "Terminal" in stored and "\x1b" not in stored
         luci_cmd = json.dumps({"command": '{"action":"profile"}'})
         luci = subprocess.check_output([BINARIES / "v2rayq-cli", "--luci-rpc"], input=luci_cmd, env=env, text=True)
         assert json.loads(luci)["result"]["profile"]["nodes"]
         node = payload["result"]["profile"]["nodes"][0]
-        assert not command(port, token, {"action": "remove_node", "id": node["id"]})[1]["result"]["profile"]["nodes"]
+        remaining = command(port, token, {"action": "remove_node", "id": node["id"]})[1]["result"]["profile"]["nodes"]
+        assert len(remaining) == 1 and remaining[0]["id"] != node["id"]
     with launch("v2rayq-server", env) as (port, token):
         request = {"action": "save", "section": "inbounds", "revision": 0, "value": [{"tag": "proxy"}]}
         assert command(port, token, request)[1]["result"]["revision"] == 1
