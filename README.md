@@ -43,6 +43,18 @@ In Nodes, **Import links** previews and imports newline-separated or base64 link
 
 The default client database is `client.redb` in the user configuration directory. The first read or edit imports a previous `client.json` and retains that file. Keep any Turso/SQLite `v2rayQ.db` for a separate migration. Both redb stores may contain unencrypted credentials. `V2RAYQ_CLIENT_DB` and `V2RAYQ_SERVER_DB` override their respective paths.
 
+Client Settings exports and merges a versioned `v2rayq-client` JSON file shared by egui, Web, LuCI, Cockpit and CLI. It contains nodes, subscription ownership, the selected node and client preferences. Merging previews counts, skips equivalent records and preserves current preferences by default. **Use imported preferences** also applies the imported language, DNS and routing mode. Existing route rules remain and new rules are appended. Merging stores the profile without starting network services or fetching subscriptions. The export includes passwords, keys and subscription URLs; keep the file private. Native **Save to file** creates a new file with private Unix permissions and requires a different path if the file already exists.
+
+```sh
+v2rayq-cli export-config > client.json
+v2rayq-cli merge-config < client.json
+v2rayq-cli merge-config --preferences < client.json
+v2rayq-cli language zh-CN
+v2rayq-cli --lang fr --help
+```
+
+Both applications support Simplified Chinese, Traditional Chinese, English and French. Select the client language in Settings and the server language in the sidebar. Client preferences are shared across its frontends; the server stores its language independently. The first launch follows the browser or system locale. All catalogs live under [`locales/client` and `locales/server`](locales/README.md); adding a catalog automatically includes it in Rust builds and plugin packaging. Cockpit installation and LuCI package building use Python 3 on the build host to prepare resources; the installed UI has no Python runtime requirement.
+
 TUN and transparent proxy controls start and stop administrator-provisioned host services. The panel reflects the service manager's reported state. The installed services own their own proxy configuration, so selecting a node or editing routes in the v2rayQ profile does not reconfigure those services. See [network service setup](packaging/network/README.md).
 
 ## Server panel
@@ -57,6 +69,7 @@ Overview and System display persisted configuration counts and local host inform
 | Shared lightweight Web, Cockpit and LuCI client UI | `frontends/luci/htdocs/luci-static/resources/v2rayq` |
 | Server configuration and styling | `apps/server/src/config.rs`, `frontends/web/server.*` |
 | Loopback transport and persistence | `crates/http-preview`, `crates/storage` |
+| Separate client/server language catalogs and resource embedding | `locales/client`, `locales/server`, `locales/embed.rs`, `crates/i18n` |
 
 Visual and interaction references include [Surge](https://nssurge.com/), [VX](https://github.com/5VNetwork/VX), [v2rayN](https://github.com/2dust/v2rayN), [Passwall](https://github.com/Openwrt-Passwall/openwrt-passwall), [S-UI](https://github.com/alireza0/s-ui) and [ShellClash](https://github.com/Kuingsmile/ShellClash).
 
@@ -64,9 +77,10 @@ Visual and interaction references include [Surge](https://nssurge.com/), [VX](ht
 
 ```sh
 cargo check --locked --workspace --all-targets --all-features
-cargo test --locked -p v2rayQ -p v2rayq-storage -p v2rayq-contracts
+cargo test --locked -p v2rayQ -p v2rayq-storage -p v2rayq-contracts -p v2rayq-http-preview -p v2rayq-i18n
 cargo build --locked -p v2rayq-cli -p v2rayq-web-client -p v2rayq-server
 python3 tools/test_panel_api.py
+python3 tools/check_locales.py
 python3 tools/check_ui_parity.py
 python3 tools/check_workspace_boundaries.py
 ```

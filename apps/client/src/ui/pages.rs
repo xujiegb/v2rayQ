@@ -2,7 +2,8 @@ use super::*;
 
 impl ClientApp {
     pub(super) fn home(&mut self, ui: &mut egui::Ui) {
-        heading(ui, "Overview");
+        let tr = self.translator;
+        heading(ui, tr.text("Overview"));
         let selected = self
             .profile
             .nodes
@@ -14,9 +15,11 @@ impl ClientApp {
             .inner_margin(egui::Margin::same(22))
             .show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
-                ui.label(RichText::new("Selected node").color(Color32::from_rgb(179, 195, 227)));
                 ui.label(
-                    RichText::new(selected.map_or("Choose a node", |node| &node.name))
+                    RichText::new(tr.text("Selected node")).color(Color32::from_rgb(179, 195, 227)),
+                );
+                ui.label(
+                    RichText::new(selected.map_or(tr.text("Choose a node"), |node| &node.name))
                         .size(25.0)
                         .strong()
                         .color(Color32::WHITE),
@@ -36,38 +39,45 @@ impl ClientApp {
         ui.add_space(12.0);
         card(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.label(format!("{} nodes", self.profile.nodes.len()));
-                ui.label(format!(
+                ui.label(tr.message(&format!("{} nodes", self.profile.nodes.len())));
+                ui.label(tr.message(&format!(
                     "{} subscriptions",
                     self.profile.subscriptions.len()
-                ));
-                if ui.button("Manage nodes").clicked() {
+                )));
+                if ui.button(tr.text("Manage nodes")).clicked() {
                     self.page = Page::Nodes;
                 }
-                if ui.button("Reload profile").clicked() && self.pending == 0 {
+                if ui.button(tr.text("Reload profile")).clicked() && self.pending == 0 {
                     self.send(Command::Profile);
                 }
             });
         });
         card(ui, |ui| {
-            ui.strong("Network services");
-            ui.label(format!("TUN  ·  {}", service_label(&self.runtime.tun)));
-            ui.label(format!(
+            ui.strong(tr.text("Network services"));
+            ui.label(tr.message(&format!(
+                "TUN  ·  {}",
+                tr.text(service_label(&self.runtime.tun))
+            )));
+            ui.label(tr.message(&format!(
                 "Transparent proxy  ·  {}",
-                service_label(&self.runtime.transparent)
-            ));
+                tr.text(service_label(&self.runtime.transparent))
+            )));
         });
     }
 
     pub(super) fn nodes(&mut self, ui: &mut egui::Ui) {
-        heading(ui, "Nodes");
+        let tr = self.translator;
+        heading(ui, tr.text("Nodes"));
         ui.horizontal_wrapped(|ui| {
             for (form, name) in [
-                (NodeForm::Share, "Import links"),
-                (NodeForm::Manual, "Manual node"),
-                (NodeForm::Subscription, "Add subscription"),
+                (NodeForm::Share, tr.text("Import links")),
+                (NodeForm::Manual, tr.text("Manual node")),
+                (NodeForm::Subscription, tr.text("Add subscription")),
             ] {
-                if ui.selectable_label(self.form == form, name).clicked() {
+                if ui
+                    .selectable_label(self.form == form, tr.text(name))
+                    .clicked()
+                {
                     self.endpoint_editor = None;
                     if self.subscription_edit.take().is_some() {
                         self.subscription_name.clear();
@@ -85,8 +95,8 @@ impl ClientApp {
         ui.add_enabled_ui(self.pending == 0, |ui| {
             match self.form {
                 NodeForm::Share => card(ui, |ui| {
-                    ui.strong("Import share links");
-                    ui.label("Paste one link per line or a base64 list.");
+                    ui.strong(tr.text("Import share links"));
+                    ui.label(tr.text("Paste one link per line or a base64 list."));
                     ui.add(
                         egui::TextEdit::multiline(&mut self.share_link)
                             .password(true)
@@ -94,11 +104,11 @@ impl ClientApp {
                             .desired_width(ui.available_width()),
                     );
                     ui.horizontal_wrapped(|ui| {
-                        if ui.button("Preview import").clicked() {
+                        if ui.button(tr.text("Preview import")).clicked() {
                             let content = self.share_link.to_owned();
                             self.send(Command::PreviewImport { content });
                         }
-                        if ui.button("Import nodes").clicked() {
+                        if ui.button(tr.text("Import nodes")).clicked() {
                             let content = self.share_link.to_owned();
                             self.send(Command::ImportNodes { content });
                         }
@@ -107,22 +117,27 @@ impl ClientApp {
                 NodeForm::Subscription => card(ui, |ui| {
                     let editing = self.subscription_edit.is_some();
                     ui.strong(if editing {
-                        "Edit subscription"
+                        tr.text("Edit subscription")
                     } else {
-                        "New subscription"
+                        tr.text("New subscription")
                     });
-                    form_row(ui, "Name (optional)", &mut self.subscription_name, false);
+                    form_row(
+                        ui,
+                        tr.text("Name (optional)"),
+                        &mut self.subscription_name,
+                        false,
+                    );
                     let caption = if editing {
-                        "New HTTPS URL (leave blank to keep current URL)"
+                        tr.text("New HTTPS URL (leave blank to keep current URL)")
                     } else {
-                        "HTTPS URL"
+                        tr.text("HTTPS URL")
                     };
-                    form_row(ui, caption, &mut self.subscription_url, true);
+                    form_row(ui, tr.text(caption), &mut self.subscription_url, true);
                     if ui
                         .button(if editing {
-                            "Save subscription"
+                            tr.text("Save subscription")
                         } else {
-                            "Add and refresh"
+                            tr.text("Add and refresh")
                         })
                         .clicked()
                     {
@@ -144,15 +159,15 @@ impl ClientApp {
             }
             let mut action = self.endpoint_form(ui);
             card(ui, |ui| {
-                ui.strong("Saved nodes");
+                ui.strong(tr.text("Saved nodes"));
                 if self.profile.nodes.is_empty() {
-                    ui.label("No nodes saved.");
+                    ui.label(tr.text("No nodes saved."));
                 }
                 const PAGE_SIZE: usize = 30;
                 if ui
                     .add(
                         egui::TextEdit::singleline(&mut self.query)
-                            .hint_text("Search name, address or protocol"),
+                            .hint_text(tr.text("Search name, address or protocol")),
                     )
                     .changed()
                 {
@@ -169,7 +184,7 @@ impl ClientApp {
                 let count = self.profile.nodes.iter().filter(matches).count();
                 self.node_page = self.node_page.min(count.saturating_sub(1) / PAGE_SIZE);
                 if count == 0 && !needle.is_empty() {
-                    ui.label("No matching nodes.");
+                    ui.label(tr.text("No matching nodes."));
                 }
                 for node in filtered.skip(self.node_page * PAGE_SIZE).take(PAGE_SIZE) {
                     ui.separator();
@@ -193,10 +208,10 @@ impl ClientApp {
                             .color(MUTED),
                         );
                         if node.subscription_id.is_some() {
-                            if ui.small_button("Make local copy").clicked() {
+                            if ui.small_button(tr.text("Make local copy")).clicked() {
                                 action = Some(Command::CopyNode { id: node.id });
                             }
-                        } else if ui.small_button("Edit endpoint").clicked() {
+                        } else if ui.small_button(tr.text("Edit endpoint")).clicked() {
                             self.form = NodeForm::None;
                             self.endpoint_editor = Some(EndpointEditor {
                                 id: node.id,
@@ -205,7 +220,7 @@ impl ClientApp {
                                 port: node.port.to_string(),
                             });
                         }
-                        if ui.small_button("Delete").clicked() {
+                        if ui.small_button(tr.text("Delete")).clicked() {
                             action = Some(Command::RemoveNode { id: node.id });
                             if self
                                 .endpoint_editor
@@ -220,7 +235,7 @@ impl ClientApp {
                 if count > PAGE_SIZE {
                     ui.horizontal(|ui| {
                         if ui
-                            .add_enabled(self.node_page > 0, egui::Button::new("Previous"))
+                            .add_enabled(self.node_page > 0, egui::Button::new(tr.text("Previous")))
                             .clicked()
                         {
                             self.node_page -= 1;
@@ -233,7 +248,7 @@ impl ClientApp {
                         if ui
                             .add_enabled(
                                 self.node_page + 1 < count.div_ceil(PAGE_SIZE),
-                                egui::Button::new("Next"),
+                                egui::Button::new(tr.text("Next")),
                             )
                             .clicked()
                         {
@@ -243,16 +258,16 @@ impl ClientApp {
                 }
             });
             card(ui, |ui| {
-                ui.strong("Subscriptions");
+                ui.strong(tr.text("Subscriptions"));
                 if self.profile.subscriptions.is_empty() {
-                    ui.label("No subscriptions saved.");
+                    ui.label(tr.text("No subscriptions saved."));
                 }
                 for (index, item) in self.profile.subscriptions.iter().enumerate() {
                     ui.separator();
                     ui.horizontal_wrapped(|ui| {
                         ui.strong(&item.name);
-                        ui.label(format!("{} nodes", item.node_count));
-                        if ui.small_button("Edit subscription").clicked() {
+                        ui.label(tr.message(&format!("{} nodes", item.node_count)));
+                        if ui.small_button(tr.text("Edit subscription")).clicked() {
                             self.form = NodeForm::Subscription;
                             self.subscription_edit = Some(item.id);
                             self.subscription_name = item.name.to_owned();
@@ -261,18 +276,21 @@ impl ClientApp {
                         if let Some(error) = &item.last_error {
                             ui.label(error);
                         }
-                        if ui.small_button("Refresh").clicked() {
+                        if ui.small_button(tr.text("Refresh")).clicked() {
                             action = Some(Command::RefreshSubscription { id: item.id });
                         }
                         if self.confirm_subscription == Some(index) {
-                            if ui.small_button("Delete subscription and nodes").clicked() {
+                            if ui
+                                .small_button(tr.text("Delete subscription and nodes"))
+                                .clicked()
+                            {
                                 action = Some(Command::RemoveSubscription { id: item.id });
                                 self.confirm_subscription = None;
                             }
-                            if ui.small_button("Cancel").clicked() {
+                            if ui.small_button(tr.text("Cancel")).clicked() {
                                 self.confirm_subscription = None;
                             }
-                        } else if ui.small_button("Delete").clicked() {
+                        } else if ui.small_button(tr.text("Delete")).clicked() {
                             self.confirm_subscription = Some(index);
                         }
                     });
@@ -285,16 +303,17 @@ impl ClientApp {
     }
 
     fn endpoint_form(&mut self, ui: &mut egui::Ui) -> Option<Command> {
+        let tr = self.translator;
         let editor = self.endpoint_editor.as_mut()?;
         let mut action = None;
         let mut cancel = false;
         card(ui, |ui| {
-            ui.strong("Edit node endpoint");
-            form_row(ui, "Name", &mut editor.name, false);
-            form_row(ui, "Server", &mut editor.host, false);
-            form_row(ui, "Port", &mut editor.port, false);
+            ui.strong(tr.text("Edit node endpoint"));
+            form_row(ui, tr.text("Name"), &mut editor.name, false);
+            form_row(ui, tr.text("Server"), &mut editor.host, false);
+            form_row(ui, tr.text("Port"), &mut editor.port, false);
             ui.horizontal(|ui| {
-                if ui.button("Save endpoint").clicked() {
+                if ui.button(tr.text("Save endpoint")).clicked() {
                     action = Some(Command::UpdateNode {
                         id: editor.id,
                         name: editor.name.to_owned(),
@@ -302,7 +321,7 @@ impl ClientApp {
                         port: editor.port.to_owned(),
                     });
                 }
-                cancel = ui.button("Cancel").clicked();
+                cancel = ui.button(tr.text("Cancel")).clicked();
             });
         });
         if cancel {
@@ -312,64 +331,78 @@ impl ClientApp {
     }
 
     fn manual_node(&mut self, ui: &mut egui::Ui) {
+        let tr = self.translator;
         let node = &mut self.manual;
-        egui::ComboBox::from_label("Protocol")
+        egui::ComboBox::from_label(tr.text("Protocol"))
             .selected_text(node.protocol.label())
             .show_ui(ui, |ui| {
                 for protocol in ProtocolKind::ALL {
                     ui.selectable_value(&mut node.protocol, protocol, protocol.label());
                 }
             });
-        form_row(ui, "Name", &mut node.name, false);
-        form_row(ui, "Server", &mut node.host, false);
-        form_row(ui, "Port", &mut node.port, false);
+        form_row(ui, tr.text("Name"), &mut node.name, false);
+        form_row(ui, tr.text("Server"), &mut node.host, false);
+        form_row(ui, tr.text("Port"), &mut node.port, false);
         let credential = if node.protocol.uses_uuid() {
-            "UUID"
+            tr.text("UUID")
         } else {
-            "Password"
+            tr.text("Password")
         };
-        form_row(ui, credential, &mut node.credential, true);
+        form_row(ui, tr.text(credential), &mut node.credential, true);
         if node.protocol == ProtocolKind::Shadowsocks {
-            form_row(ui, "Cipher", &mut node.method, false);
+            form_row(ui, tr.text("Cipher"), &mut node.method, false);
         } else {
             if node.protocol.uses_uuid() {
-                ui.checkbox(&mut node.tls, "TLS");
+                ui.checkbox(&mut node.tls, tr.text("TLS"));
             }
             if !node.protocol.uses_uuid() || node.tls {
-                form_row(ui, "TLS server name", &mut node.server_name, false);
+                form_row(ui, tr.text("TLS server name"), &mut node.server_name, false);
             }
         }
         if node.protocol != ProtocolKind::Shadowsocks {
-            ui.collapsing("Advanced connection options", |ui| {
+            ui.collapsing(tr.text("Advanced connection options"), |ui| {
                 if node.protocol.supports_transport() {
-                    egui::ComboBox::from_label("Transport")
-                        .selected_text(node.transport.label())
+                    egui::ComboBox::from_label(tr.text("Transport"))
+                        .selected_text(tr.text(node.transport.label()))
                         .show_ui(ui, |ui| {
                             for transport in ManualTransport::ALL {
                                 ui.selectable_value(
                                     &mut node.transport,
                                     transport,
-                                    transport.label(),
+                                    tr.text(transport.label()),
                                 );
                             }
                         });
                     match node.transport {
                         ManualTransport::Tcp => {}
-                        ManualTransport::Grpc => {
-                            form_row(ui, "gRPC service name", &mut node.service_name, false)
-                        }
+                        ManualTransport::Grpc => form_row(
+                            ui,
+                            tr.text("gRPC service name"),
+                            &mut node.service_name,
+                            false,
+                        ),
                         _ => {
-                            form_row(ui, "Transport path", &mut node.transport_path, false);
-                            form_row(ui, "Transport host", &mut node.transport_host, false);
+                            form_row(
+                                ui,
+                                tr.text("Transport path"),
+                                &mut node.transport_path,
+                                false,
+                            );
+                            form_row(
+                                ui,
+                                tr.text("Transport host"),
+                                &mut node.transport_host,
+                                false,
+                            );
                         }
                     }
                 }
                 if !node.protocol.uses_uuid() || node.tls {
-                    form_row(ui, "ALPN (comma separated)", &mut node.alpn, false);
+                    form_row(ui, tr.text("ALPN (comma separated)"), &mut node.alpn, false);
                 }
             });
         }
-        if ui.button("Save node").clicked() {
+        if ui.button(tr.text("Save node")).clicked() {
             match self.manual.create() {
                 Ok(_) => {
                     let node = std::mem::take(&mut self.manual);
@@ -378,54 +411,5 @@ impl ClientApp {
                 Err(error) => self.notice = error,
             }
         }
-    }
-
-    pub(super) fn settings(&mut self, ui: &mut egui::Ui) {
-        heading(ui, "Settings");
-        card(ui, |ui| {
-            let mut change = None;
-            for (mode, label, status) in [
-                (NetworkMode::Tun, "TUN", &self.runtime.tun),
-                (
-                    NetworkMode::Transparent,
-                    "Transparent proxy",
-                    &self.runtime.transparent,
-                ),
-            ] {
-                ui.horizontal_wrapped(|ui| {
-                    ui.strong(label);
-                    ui.label(service_label(status));
-                    let enable = status.running != Some(true);
-                    if ui
-                        .add_enabled(
-                            status.can_change && self.pending == 0,
-                            egui::Button::new(if enable { "Start" } else { "Stop" }),
-                        )
-                        .clicked()
-                    {
-                        change = Some(Command::SetNetwork {
-                            mode,
-                            enabled: enable,
-                        });
-                    }
-                });
-            }
-            if let Some(command) = change {
-                self.send(command);
-            }
-            ui.add_space(5.0);
-            ui.label(if cfg!(unix) { "Starting or stopping an installed service uses sudo. Graphical sessions need SUDO_ASKPASS." }
-                else { "Starting or stopping an installed service requires an administrator session." });
-            if ui
-                .add_enabled(self.pending == 0, egui::Button::new("Refresh status"))
-                .clicked()
-            {
-                self.send(Command::Status);
-            }
-        });
-        card(ui, |ui| {
-            ui.strong("Profile database");
-            ui.label(self.data_path.display().to_string());
-        });
     }
 }

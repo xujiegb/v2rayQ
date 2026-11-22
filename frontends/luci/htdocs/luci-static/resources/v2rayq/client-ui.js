@@ -1,3 +1,5 @@
+import { loadLocalization } from "./i18n.js";
+
 const clientPages = [
   ["overview", "Overview", "⌂"],
   ["nodes", "Nodes", "◇"],
@@ -11,76 +13,77 @@ const ruleMatches = { domain: "Domain", domain_suffix: "Domain suffix", ip_cidr:
 const ruleTargets = { proxy: "Selected proxy", direct: "Direct", block: "Block" };
 const services = { tun: "TUN", transparent: "Transparent proxy" };
 
-function element(tag, className = "", text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
-function button(label, onClick, style = "") {
-  const node = element("button", `vq-button ${style}`, label);
-  node.type = "button";
-  if (onClick) node.onclick = onClick;
-  return node;
-}
-
-function field(label, name, options = {}) {
-  const wrapper = element("label", "vq-field", label);
-  const input = element(options.choices ? "select" : "input");
-  input.name = name;
-  if (options.choices) {
-    input.setAttribute("aria-label", label);
-    for (const [value, title] of Object.entries(options.choices)) {
-      const option = element("option", "", title);
-      option.value = value;
-      input.append(option);
-    }
-  } else {
-    input.type = options.type || "text";
-    input.required = options.required || false;
-    input.autocomplete = "off";
-    if (options.numeric) input.inputMode = "numeric";
+export async function mountClient(root, send, { delegatedControl = false } = {}) {
+  const i18n = await loadLocalization(new URL("./locales/", import.meta.url), "client");
+  function element(tag, className = "", text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
   }
-  if (options.value !== undefined) input.value = options.value;
-  wrapper.append(input);
-  return wrapper;
-}
 
-function card(title, ...children) {
-  const node = element("section", "vq-card");
-  if (title) node.append(element("h2", "", title));
-  node.append(...children);
-  return node;
-}
+  function button(label, onClick, style = "") {
+    const node = element("button", `vq-button ${style}`, i18n.text(label));
+    node.type = "button";
+    if (onClick) node.onclick = onClick;
+    return node;
+  }
 
-function row(title, detail, ...actions) {
-  const layout = element("div", "vq-row");
-  const body = element("div", "vq-row-content");
-  body.append(element("strong", "", title), element("small", "", detail));
-  const controls = element("div", "vq-actions");
-  controls.append(...actions);
-  layout.append(body, controls);
-  return layout;
-}
+  function field(label, name, options = {}) {
+    const wrapper = element("label", "vq-field", i18n.text(label));
+    const input = element(options.choices ? "select" : "input");
+    input.name = name;
+    if (options.choices) {
+      input.setAttribute("aria-label", i18n.text(label));
+      for (const [value, title] of Object.entries(options.choices)) {
+        const option = element("option", "", i18n.text(title));
+        option.value = value;
+        input.append(option);
+      }
+    } else {
+      input.type = options.type || "text";
+      input.required = options.required || false;
+      input.autocomplete = "off";
+      if (options.numeric) input.inputMode = "numeric";
+    }
+    if (options.value !== undefined) input.value = options.value;
+    wrapper.append(input);
+    return wrapper;
+  }
 
-function serviceLabel(status) {
-  if (!status?.installed) return "Service not installed";
-  if (status.running === true) return "Running";
-  if (status.running === false) return "Stopped";
-  return "Status unavailable";
-}
+  function card(title, ...children) {
+    const node = element("section", "vq-card");
+    if (title) node.append(element("h2", "", i18n.text(title)));
+    node.append(...children);
+    return node;
+  }
 
-export function mountClient(root, send, { delegatedControl = false } = {}) {
+  function row(title, detail, ...actions) {
+    const layout = element("div", "vq-row");
+    const body = element("div", "vq-row-content");
+    body.append(element("strong", "", title), element("small", "", detail));
+    const controls = element("div", "vq-actions");
+    controls.append(...actions);
+    layout.append(body, controls);
+    return layout;
+  }
+
+  function serviceLabel(status) {
+    if (!status?.installed) return i18n.text("Service not installed");
+    if (status.running === true) return i18n.text("Running");
+    if (status.running === false) return i18n.text("Stopped");
+    return i18n.text("Status unavailable");
+  }
+
   const state = {
     page: "overview", form: "", busy: false, profile: null, runtime: {}, query: "", nodePage: 0,
-    editingNode: null, editingSubscription: null, editingRule: undefined, routingDraft: null
+    editingNode: null, editingSubscription: null, editingRule: undefined, routingDraft: null, configuration: "", usePreferences: false
   };
   const rail = element("aside", "vq-rail");
   const brand = element("div", "vq-brand");
   brand.append(element("span", "vq-mark", "◇"), element("strong", "", "v2rayQ"));
   const navigation = element("nav", "vq-nav");
-  navigation.setAttribute("aria-label", "Client navigation");
+  navigation.setAttribute("aria-label", i18n.text("Client navigation"));
   const content = element("div", "vq-content");
   const notice = element("div", "vq-notice");
   notice.setAttribute("role", "status");
@@ -93,16 +96,20 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
     if (state.busy) return;
     state.busy = true;
     root.setAttribute("aria-busy", "true");
-    notice.textContent = "Working…";
+    notice.textContent = i18n.text("Working…");
     try {
       const response = await send(command);
-      if (response.profile) state.profile = response.profile;
+      if (response.profile) {
+        state.profile = response.profile;
+        await i18n.use(response.profile.settings.language);
+      }
       if (response.runtime) state.runtime = response.runtime;
-      notice.textContent = response.message || "";
-      onSuccess?.();
+      notice.textContent = i18n.message(response.message || "");
+      if (response.merge) notice.textContent = i18n.format("{nodes} nodes · {subscriptions} subscriptions · {rules} rules · {duplicates} duplicates", response.merge);
+      onSuccess?.(response);
       if (redraw) render();
     } catch (error) {
-      notice.textContent = error.message || String(error);
+      notice.textContent = i18n.message(error.message || String(error));
     } finally {
       state.busy = false;
       root.setAttribute("aria-busy", "false");
@@ -121,27 +128,27 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
   function summary(profile) {
     const selected = profile.nodes.find(node => node.id === profile.selected_node);
     const hero = element("section", "vq-hero");
-    hero.append(element("div", "vq-hero-kicker", "Selected node"),
-      element("h2", "", selected?.name || "Choose a node"),
-      element("p", "", selected ? `${protocols[selected.protocol]} · ${endpoint(selected)}` : "Import a share link or configure an endpoint."),
+    hero.append(element("div", "vq-hero-kicker", i18n.text("Selected node")),
+      element("h2", "", selected?.name || i18n.text("Choose a node")),
+      element("p", "", selected ? `${protocols[selected.protocol]} · ${endpoint(selected)}` : i18n.text("Import a share link or configure an endpoint.")),
       button("Manage nodes", () => navigate("nodes"), "vq-light"));
     const grid = element("div", "vq-grid");
-    grid.append(card("Profile", row("Nodes", String(profile.nodes.length)), row("Subscriptions", String(profile.subscriptions.length))),
-      card("Network services", ...Object.entries(services).map(([key, title]) => row(title, serviceLabel(state.runtime[key])))));
+    grid.append(card("Profile", row(i18n.text("Nodes"), String(profile.nodes.length)), row(i18n.text("Subscriptions"), String(profile.subscriptions.length))),
+      card("Network services", ...Object.entries(services).map(([key, title]) => row(i18n.text(title), serviceLabel(state.runtime[key])))));
     return [hero, grid];
   }
 
   function shareForm() {
     const form = element("form", "vq-import-form");
-    const label = element("label", "vq-field", "Share links or base64 list");
+    const label = element("label", "vq-field", i18n.text("Share links or base64 list"));
     const text = element("textarea");
     text.required = true;
     text.rows = 6;
     text.spellcheck = false;
     text.autocomplete = "off";
-    text.placeholder = "Paste one link per line or select a text file";
+    text.placeholder = i18n.text("Paste one link per line or select a text file");
     label.append(text);
-    const source = element("label", "vq-field vq-file", "Import from file");
+    const source = element("label", "vq-field vq-file", i18n.text("Import from file"));
     const file = element("input");
     file.type = "file";
     file.accept = ".txt,.list,.b64,text/plain";
@@ -149,12 +156,12 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
     file.onchange = async () => {
       const item = file.files?.[0];
       if (!item) return;
-      if (item.size > 96 * 1024) { notice.textContent = "Select a text file of up to 96 KiB."; return; }
+      if (item.size > 96 * 1024) { notice.textContent = i18n.text("Select a text file of up to 96 KiB."); return; }
       try {
         text.value = new TextDecoder("utf-8", { fatal: true }).decode(await item.arrayBuffer());
-        notice.textContent = "File ready to preview.";
+        notice.textContent = i18n.text("File ready to preview.");
       } catch {
-        notice.textContent = "Could not read the file as UTF-8 text.";
+        notice.textContent = i18n.text("Could not read the file as UTF-8 text.");
       }
     };
     const actions = element("div", "vq-actions");
@@ -208,11 +215,11 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
     const advanced = element("details", "vq-advanced");
     const options = element("div", "vq-form");
     options.append(transport, transportPath, transportHost, serviceName, alpn);
-    advanced.append(element("summary", "", "Advanced connection options"), options);
+    advanced.append(element("summary", "", i18n.text("Advanced connection options")), options);
     const updateProtocol = () => {
       const kind = protocol.lastChild.value;
       const uuid = kind === "vless" || kind === "vmess";
-      credential.firstChild.nodeValue = uuid ? "UUID" : "Password";
+      credential.firstChild.nodeValue = i18n.text(uuid ? "UUID" : "Password");
       credential.lastChild.required = kind !== "hysteria2";
       cipher.hidden = kind !== "shadowsocks";
       tls.hidden = !uuid;
@@ -287,7 +294,7 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
     const search = field("Search nodes", "node-search", { type: "search", value: state.query });
     const nodeRows = element("div");
     const pagination = element("div", "vq-pagination");
-    pagination.setAttribute("aria-label", "Node pages");
+    pagination.setAttribute("aria-label", i18n.text("Node pages"));
     const pageSize = 30;
     function showNodes() {
       const query = state.query.trim().toLowerCase();
@@ -310,8 +317,8 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
             if (state.editingNode === node.id) state.editingNode = null;
           }), "vq-delete"));
       }));
-      if (!matches.length) nodeRows.append(element("p", "", query ? "No matching nodes." : "No nodes saved."));
-      const nodeCount = `${matches.length} ${matches.length === 1 ? "node" : "nodes"}`;
+      if (!matches.length) nodeRows.append(element("p", "", i18n.text(query ? "No matching nodes." : "No nodes saved.")));
+      const nodeCount = i18n.format(matches.length === 1 ? "{count} node" : "{count} nodes", { count: matches.length });
       const label = totalPages > 1 ? `${nodeCount} · ${state.nodePage + 1} / ${totalPages}` : nodeCount;
       const count = element("small", "", label);
       count.setAttribute("role", "status");
@@ -331,9 +338,9 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
     });
     showNodes();
     const subscriptions = profile.subscriptions.map(item => {
-      const count = `${item.node_count} ${item.node_count === 1 ? "node" : "nodes"}`;
-      const status = item.last_error || (item.last_updated_at
-        ? `Updated ${new Date(item.last_updated_at * 1000).toLocaleString()}` : "Awaiting refresh");
+      const count = i18n.format(item.node_count === 1 ? "{count} node" : "{count} nodes", { count: item.node_count });
+      const status = (item.last_error ? i18n.message(item.last_error) : "") || (item.last_updated_at
+        ? i18n.format("Updated {date}", { date: new Date(item.last_updated_at * 1000).toLocaleString() }) : i18n.text("Awaiting refresh"));
       return row(item.name, `${count} · ${status}`,
         button("Edit subscription", () => {
           state.editingSubscription = item.id;
@@ -344,7 +351,7 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
         }),
         button("Refresh", () => perform({ action: "refresh_subscription", id: item.id })),
         button("Delete", () => {
-          if (window.confirm("Delete this subscription and its imported nodes?")) perform({ action: "remove_subscription", id: item.id }, () => {
+          if (window.confirm(i18n.text("Delete this subscription and its imported nodes?"))) perform({ action: "remove_subscription", id: item.id }, () => {
             if (state.editingSubscription === item.id) { state.editingSubscription = null; state.form = ""; }
           });
         }, "vq-delete"));
@@ -354,7 +361,7 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
     const forms = { share: shareForm, subscription: () => subscriptionForm(subscription), manual: manualForm };
     return [actions, ...(state.form ? [forms[state.form]()] : []), ...(edited ? [endpointForm(edited)] : []),
       card("Saved nodes", search, nodeRows, pagination),
-      card("Subscriptions", ...(subscriptions.length ? subscriptions : [element("p", "", "No subscriptions saved.")]))];
+      card("Subscriptions", ...(subscriptions.length ? subscriptions : [element("p", "", i18n.text("No subscriptions saved."))]))];
   }
 
   function ruleEditor(rule) {
@@ -395,23 +402,69 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
     };
     const rules = settings.route_rules || [];
     const header = element("div", "vq-card-header");
-    header.append(element("h2", "", "Route rules"), button("Add rule", () => showRuleEditor(null), "vq-primary"));
+    header.append(element("h2", "", i18n.text("Route rules")), button("Add rule", () => showRuleEditor(null), "vq-primary"));
     const rows = rules.map((rule, index) => {
       const move = direction => perform({ action: "move_route_rule", id: rule.id, direction });
       const up = button("Move up", () => move("up"));
       const down = button("Move down", () => move("down"));
       up.disabled = index === 0;
       down.disabled = index === rules.length - 1;
-      return row(`${index + 1} · ${rule.value}`, `${ruleMatches[rule.kind]} → ${ruleTargets[rule.target]}`,
+      return row(`${index + 1} · ${rule.value}`, `${i18n.text(ruleMatches[rule.kind])} → ${i18n.text(ruleTargets[rule.target])}`,
         button("Edit rule", () => showRuleEditor(rule.id)), up, down,
         button("Delete rule", () => perform({ action: "remove_route_rule", id: rule.id }, () => {
           if (state.editingRule === rule.id) state.editingRule = undefined;
         }), "vq-delete"));
     });
-    const rulesCard = card("", header, element("p", "", "Order is top to bottom. Rules are saved locally for the future Core."));
+    const rulesCard = card("", header, element("p", "", i18n.text("Order is top to bottom. Rules are saved locally for the future Core.")));
     if (state.editingRule !== undefined) rulesCard.append(ruleEditor(rules.find(rule => rule.id === state.editingRule)));
-    rulesCard.append(...(rows.length ? rows : [element("p", "", "No route rules saved.")]));
+    rulesCard.append(...(rows.length ? rows : [element("p", "", i18n.text("No route rules saved."))]));
     return [card("Profile defaults", form), rulesCard];
+  }
+
+  function configurationSettings() {
+    const form = element("div", "vq-import-form");
+    const textLabel = element("label", "vq-field", i18n.text("Configuration JSON"));
+    const text = element("textarea");
+    text.rows = 6;
+    text.spellcheck = false;
+    text.autocomplete = "off";
+    text.value = state.configuration;
+    text.oninput = () => { state.configuration = text.value; };
+    textLabel.append(text);
+    const fileLabel = element("label", "vq-field vq-file", i18n.text("Choose configuration file"));
+    const file = element("input");
+    file.type = "file";
+    file.accept = ".json,application/json";
+    fileLabel.append(file);
+    file.onchange = async () => {
+      const item = file.files?.[0];
+      if (!item) return;
+      if (item.size > 4 * 1024 * 1024) { notice.textContent = i18n.text("Configuration exceeds 4 MiB"); return; }
+      try {
+        state.configuration = new TextDecoder("utf-8", { fatal: true }).decode(await item.arrayBuffer());
+        text.value = state.configuration;
+      } catch { notice.textContent = i18n.text("Could not read configuration file"); }
+    };
+    const preferences = field("Use imported preferences", "preferences", { type: "checkbox" });
+    preferences.classList.add("vq-check");
+    preferences.lastChild.checked = state.usePreferences;
+    preferences.onchange = () => { state.usePreferences = preferences.lastChild.checked; };
+    const actions = element("div", "vq-actions");
+    actions.append(button("Download configuration", () => perform({ action: "export_configuration" }, response => {
+      const url = URL.createObjectURL(new Blob([response.configuration], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "v2rayq-client.json";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      notice.textContent = i18n.text("Configuration exported");
+    }, false)), button("Preview merge", () => perform({ action: "merge_configuration", content: state.configuration,
+      use_preferences: state.usePreferences, preview: true }, null, false)),
+      button("Merge configuration", () => perform({ action: "merge_configuration", content: state.configuration,
+        use_preferences: state.usePreferences }, () => { state.configuration = ""; }), "vq-primary"));
+    form.append(element("p", "", i18n.text("The export includes node credentials and subscription URLs. Keep the file private.")),
+      fileLabel, textLabel, preferences, actions);
+    return card("Configuration export and merge", form);
   }
 
   function settings() {
@@ -420,22 +473,25 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
       const enabled = status?.running !== true;
       const toggle = button(enabled ? "Start" : "Stop", () => perform({ action: "set_network", mode, enabled }), "vq-primary");
       toggle.disabled = !(status?.can_change || (delegatedControl && status?.installed));
-      return row(title, serviceLabel(status), toggle);
+      return row(i18n.text(title), serviceLabel(status), toggle);
     });
     const authorization = delegatedControl ? "Service control uses the host session's permissions." : "On macOS, Linux and FreeBSD, graphical authorization uses SUDO_ASKPASS.";
-    return [card("Traffic interception", ...rows, element("p", "", authorization),
+    const language = field("Language", "language", { choices: Object.fromEntries(i18n.languages.map(item => [item.code, item.name])), value: i18n.code });
+    language.lastChild.onchange = () => perform({ action: "save_language", language: language.lastChild.value });
+    return [card("Appearance", language), configurationSettings(), card("Traffic interception", ...rows, element("p", "", i18n.text(authorization)),
       button("Refresh service status", () => perform({ action: "status" })))];
   }
 
   function render() {
+    navigation.setAttribute("aria-label", i18n.text("Client navigation"));
     navigation.replaceChildren(...clientPages.map(([key, title, icon]) => {
       const item = button("", () => navigate(key), "vq-nav-item");
-      item.append(element("span", "vq-icon", icon), element("span", "", title));
+      item.append(element("span", "vq-icon", icon), element("span", "", i18n.text(title)));
       item.firstChild.setAttribute("aria-hidden", "true");
       if (state.page === key) item.setAttribute("aria-current", "page");
       return item;
     }));
-    view.replaceChildren(element("h1", "vq-heading", clientPages.find(([key]) => key === state.page)[1]));
+    view.replaceChildren(element("h1", "vq-heading", i18n.text(clientPages.find(([key]) => key === state.page)[1])));
     const profile = state.profile;
     if (!profile) {
       view.append(button("Load profile", async () => {

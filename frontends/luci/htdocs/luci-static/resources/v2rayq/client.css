@@ -42,6 +42,8 @@
 .vq-client .vq-form p { grid-column: 1 / -1; }
 .vq-client .vq-form .vq-button { justify-self: start; }
 .vq-client .vq-field { display: grid; gap: 5px; color: var(--vq-muted); font-weight: 600; }
+.vq-client .vq-check { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 8px; }
+.vq-client .vq-check input { margin: 0; accent-color: var(--vq-brand); }
 .vq-client .vq-field input:not([type="checkbox"]), .vq-client .vq-field select { color: var(--vq-ink); background: white; border: 1px solid var(--vq-edge); padding: 7px 10px; border-radius: 8px; font: inherit; width: 100%; }
 @media (max-width: 710px) {
   .vq-client { display: block; }

@@ -8,7 +8,7 @@ use uuid::Uuid;
 use v2rayQ::{
     client::{
         Access, ClientService, Command, ManualNode, ManualTransport, Profile, ProtocolKind, Reply,
-        default_data_path,
+        default_data_path, language,
         runtime::{NetworkMode, Runtime, ServiceStatus},
     },
     model::{RouteMode, RuleDirection, RuleFields, RuleMatch, RuleTarget},
@@ -17,6 +17,7 @@ use v2rayq_contracts::CLIENT_NAV;
 
 mod pages;
 mod routes;
+mod settings;
 mod theme;
 mod widgets;
 use widgets::{card, form_row, heading, service_label};
@@ -43,10 +44,12 @@ enum NodeForm {
     Subscription,
 }
 
+#[derive(Clone, Copy)]
 enum Completion {
     NodeForm(NodeForm),
     Endpoint,
     Rule,
+    Merge,
     Other,
 }
 
@@ -67,6 +70,10 @@ pub struct ClientApp {
     page: Page,
     profile: Profile,
     runtime: Runtime,
+    translator: v2rayq_i18n::Translator,
+    configuration: String,
+    configuration_path: String,
+    use_preferences: bool,
     data_path: PathBuf,
     form: NodeForm,
     share_link: String,
@@ -111,6 +118,7 @@ impl ClientApp {
                     }
                     Command::UpdateNode { .. } => Completion::Endpoint,
                     Command::SaveRouteRule { .. } => Completion::Rule,
+                    Command::MergeConfiguration { preview: false, .. } => Completion::Merge,
                     _ => Completion::Other,
                 };
                 if responses
@@ -126,6 +134,13 @@ impl ClientApp {
             page: Page::Home,
             profile: Profile::default(),
             runtime: Runtime::default(),
+            translator: language::RESOURCES.translator(&v2rayq_i18n::system_language()),
+            configuration: String::new(),
+            configuration_path: data_path
+                .with_file_name("v2rayq-client.json")
+                .display()
+                .to_string(),
+            use_preferences: false,
             data_path,
             form: NodeForm::None,
             share_link: String::new(),
@@ -163,12 +178,24 @@ impl ClientApp {
             match result {
                 Ok(reply) => {
                     if let Some(data) = reply.profile {
+                        if matches!(completion, Completion::Merge) {
+                            self.routing = Some((
+                                data.settings.route_mode,
+                                data.settings.dns_server.to_owned(),
+                            ));
+                        }
                         self.routing.get_or_insert_with(|| {
                             (
                                 data.settings.route_mode,
                                 data.settings.dns_server.to_owned(),
                             )
                         });
+                        let requested = if data.settings.language.is_empty() {
+                            v2rayq_i18n::system_language()
+                        } else {
+                            data.settings.language.to_owned()
+                        };
+                        self.translator = language::RESOURCES.translator(&requested);
                         self.profile = data;
                         self.confirm_subscription = None;
                     }
@@ -191,9 +218,23 @@ impl ClientApp {
                         }
                         Completion::Endpoint => self.endpoint_editor = None,
                         Completion::Rule => self.rule_editor = None,
+                        Completion::Merge => self.configuration.clear(),
                         Completion::Other => {}
                     }
-                    if let Some(message) = reply.message {
+                    if let Some(configuration) = reply.configuration {
+                        self.configuration = configuration;
+                        self.notice = "Configuration exported".into();
+                    }
+                    let merged = reply.merge.is_some();
+                    if let Some(summary) = reply.merge {
+                        self.notice = format!(
+                            "{} nodes · {} subscriptions · {} rules · {} duplicates",
+                            summary.nodes, summary.subscriptions, summary.rules, summary.duplicates
+                        );
+                    }
+                    if let Some(message) = reply.message
+                        && !merged
+                    {
                         self.notice = message;
                     }
                 }
@@ -226,14 +267,15 @@ impl ClientApp {
     }
 
     fn nav_items(&mut self, ui: &mut egui::Ui, vertical: bool) {
+        let tr = self.translator;
         for (page, item) in [Page::Home, Page::Nodes, Page::Routing, Page::Settings]
             .into_iter()
             .zip(CLIENT_NAV)
         {
             let label = if vertical {
-                format!("{}   {}", item.icon, item.title)
+                format!("{}   {}", item.icon, tr.text(item.title))
             } else {
-                item.title.into()
+                tr.text(item.title).into()
             };
             let button =
                 egui::Button::new(RichText::new(label).size(15.0)).selected(self.page == page);
@@ -269,7 +311,7 @@ impl eframe::App for ClientApp {
                         ui.spinner();
                     }
                     if !self.notice.is_empty() {
-                        ui.label(RichText::new(&self.notice).color(INK));
+                        ui.label(RichText::new(self.translator.message(&self.notice)).color(INK));
                     }
                     match self.page {
                         Page::Home => self.home(ui),

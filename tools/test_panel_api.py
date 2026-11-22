@@ -141,3 +141,42 @@ with tempfile.TemporaryDirectory() as directory:
         assert names == {"tls": ["Public TLS"], "reality": ["Gateway"]}
 
 print("Panel authorization, fragmented HTTP bodies, shared client storage, batch imports, subscriptions and TLS/REALITY drafts: OK")
+
+# Portable client data must survive different database IDs and repeated merges.
+with tempfile.TemporaryDirectory() as directory:
+    env = {**os.environ, "V2RAYQ_CLIENT_DB": f"{directory}/client.redb", "V2RAYQ_SERVER_DB": f"{directory}/server.redb"}
+    with launch("v2rayq-web-client", env) as (port, token):
+        command(port, token, {"action": "add_link", "link": SHARE})
+        command(port, token, {"action": "save_routing", "route_mode": "global", "dns_server": "9.9.9.9"})
+        exported = command(port, token, {"action": "export_configuration"})[1]["result"]["configuration"]
+        decoded = json.loads(exported)
+        assert decoded["format"] == "v2rayq-client" and decoded["version"] == 1
+        assert decoded["profile"]["nodes"][0]["node"]["protocol"]["options"]["password"] == "secret"
+        cli_json = subprocess.check_output([BINARIES / "v2rayq-cli", "export-config"], env=env, text=True)
+        assert json.loads(cli_json) == decoded
+        original_id = decoded["profile"]["nodes"][0]["node"]["id"]
+        command(port, token, {"action": "remove_node", "id": original_id})
+        command(port, token, {"action": "save_routing", "route_mode": "direct", "dns_server": "1.1.1.1"})
+        request = {"action": "merge_configuration", "content": exported, "preview": True}
+        assert command(port, token, request)[1]["result"]["merge"]["nodes"] == 1
+        assert command(port, token, {"action": "profile"})[1]["result"]["profile"]["nodes"] == []
+        result = command(port, token, {**request, "preview": False})[1]["result"]
+        assert result["profile"]["nodes"][0]["id"] != original_id
+        assert result["profile"]["settings"]["dns_server"] == "1.1.1.1"
+        result = command(port, token, {**request, "preview": False, "use_preferences": True})[1]["result"]
+        assert result["merge"]["nodes"] == 0 and result["merge"]["duplicates"] == 1
+        assert result["profile"]["settings"]["dns_server"] == "9.9.9.9"
+        malformed = {**decoded, "version": 99}
+        assert "error" in command(port, token, {**request, "content": json.dumps(malformed)})[1]
+        for code in ["en", "zh-CN", "zh-TW", "fr"]:
+            profile = command(port, token, {"action": "save_language", "language": code})[1]["result"]["profile"]
+            assert profile["settings"]["language"] == code
+            help_text = subprocess.check_output([BINARIES / "v2rayq-cli", "--help"], env=env, text=True)
+            assert "export-config" in help_text and "CLI help" not in help_text
+    with launch("v2rayq-server", env) as (port, token):
+        command(port, token, {"action": "save", "section": "settings", "revision": 0, "value": {"name": "Example"}})
+        command(port, token, {"action": "save_language", "language": "zh-TW"})
+        assert command(port, token, {"action": "language"})[1]["result"]["language"] == "zh-TW"
+        settings = command(port, token, {"action": "load", "section": "settings"})[1]["result"]
+        assert settings == {"revision": 1, "value": {"name": "Example"}}
+print("Portable configuration preview, idempotent merge and independent language preferences: OK")

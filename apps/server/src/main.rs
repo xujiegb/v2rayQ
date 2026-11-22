@@ -1,12 +1,18 @@
 #![forbid(unsafe_code)]
 
 mod config;
+mod language;
 
 use std::io::{self, Read};
 use v2rayq_contracts::SERVER_PORT;
 use v2rayq_http_preview::{Asset, COMMAND_LIMIT, Panel, serve};
 
 const ASSETS: &[Asset] = &[
+    Asset {
+        path: "/assets/i18n.js",
+        mime: "text/javascript; charset=utf-8",
+        body: include_str!("../../../frontends/luci/htdocs/luci-static/resources/v2rayq/i18n.js"),
+    },
     Asset {
         path: "/assets/server.css",
         mime: "text/css; charset=utf-8",
@@ -38,7 +44,7 @@ fn main() -> io::Result<()> {
         if input.len() > COMMAND_LIMIT {
             println!(
                 "{}",
-                serde_json::json!({ "error": "Command exceeds 128 KiB" })
+                serde_json::json!({ "error": "Command exceeds 8 MiB" })
             );
         } else {
             println!("{}", config::dispatch(&input));
@@ -50,6 +56,8 @@ fn main() -> io::Result<()> {
             title: "Server",
             html: include_str!("../../../frontends/web/server.html"),
             assets: ASSETS,
+            locales: language::LOCALES,
+            locale_manifest: language::MANIFEST,
         },
         SERVER_PORT,
         config::dispatch,

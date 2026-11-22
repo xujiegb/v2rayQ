@@ -20,6 +20,7 @@ required-features = ["desktop"]
 
 [dependencies]
 uuid = "1"
+v2rayq-i18n = { path = "../../crates/i18n" }
 v2rayQ = { path = "../.." }
 v2rayq-contracts = { path = "../../crates/contracts" }
 eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "default_fonts"] }
