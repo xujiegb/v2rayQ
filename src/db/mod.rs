@@ -1,17 +1,8 @@
-pub mod nodes;
-pub mod profiles;
-pub mod runtime_settings;
-pub mod schema;
-pub mod subscriptions;
+//! redb storage backend. Kept as a stable facade for future services.
+#![forbid(unsafe_code)]
 
-use turso::{Builder, Connection};
+pub use v2rayq_storage::{Storage, StorageResult};
 
-pub async fn open(path: &str) -> turso::Result<Connection> {
-    let database = Builder::new_local(path).build().await?;
-    let connection = database.connect()?;
-
-    connection.execute("PRAGMA foreign_keys = ON", ()).await?;
-    schema::initialize(&connection).await?;
-
-    Ok(connection)
+pub fn open(path: &str) -> StorageResult<Storage> {
+    Storage::open(path)
 }

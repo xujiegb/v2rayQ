@@ -1,0 +1,68 @@
+name: Native binaries
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    tags: ['v*']
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      - name: Build independent client, Web and server binaries
+        run: cargo build --release -p v2rayq-client -p v2rayq-web-client -p v2rayq-server
+      - name: Archive Unix binaries
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          for app in client web-client server; do
+            tar -czf "dist/v2rayq-${app}-${{ runner.os }}-$(uname -m).tar.gz" -C target/release "v2rayq-${app}"
+          done
+      - name: Archive Windows binaries
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          foreach ($app in @('client', 'web-client', 'server')) {
+            Compress-Archive -Path "target/release/v2rayq-$app.exe" -DestinationPath "dist/v2rayq-$app-Windows-x64.zip"
+          }
+      - name: Upload separate application artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2rayq-${{ runner.os }}-${{ runner.arch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  freebsd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: vmactions/freebsd-vm@v1
+        with:
+          release: '15.1'
+          prepare: |
+            pkg install -y rust pkgconf libxkbcommon wayland libX11 libxcb libXcursor libXi libXrandr
+          run: |
+            cargo build --release -p v2rayq-client -p v2rayq-web-client -p v2rayq-server
+            mkdir -p dist
+            for app in client web-client server; do
+              tar -czf "dist/v2rayq-${app}-FreeBSD-amd64.tar.gz" -C target/release "v2rayq-${app}"
+            done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v2rayq-FreeBSD-amd64
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14

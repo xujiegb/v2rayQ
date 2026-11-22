@@ -1,0 +1,7 @@
+{
+  "admin/services/v2rayq": {
+    "title": "v2rayQ",
+    "order": 55,
+    "action": {"type": "view", "path": "v2rayq/client"}
+  }
+}

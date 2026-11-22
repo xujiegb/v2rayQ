@@ -1,18 +1,43 @@
+[workspace]
+members = [
+    ".",
+    "apps/client",
+    "apps/server",
+    "apps/web-client",
+    "crates/contracts",
+    "crates/http-preview",
+    "crates/storage",
+]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.95"
+license = "BSD-3-Clause"
+
 [package]
 name = "v2rayQ"
 version = "0.1.0"
-edition = "2024"
-rust-version = "1.88"
-license = "BSD-3-Clause"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+legacy-tui = ["dep:crossterm", "dep:ratatui"]
+
+[[bin]]
+name = "v2rayq-tui"
+path = "src/main.rs"
+required-features = ["legacy-tui"]
 
 [dependencies]
-base64 = "0.22"
-crossterm = "0.29"
-ratatui = "0.30.2"
+base64 = "0.23.1"
+crossterm = { version = "0.29", optional = true }
+ratatui = { version = "0.30.2", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-turso = "0.7.2"
 url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
+v2rayq-storage = { path = "crates/storage" }

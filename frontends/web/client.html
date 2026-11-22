@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>v2rayQ · Client panel</title>
+  <link rel="stylesheet" href="assets/panel.css">
+  <script defer src="assets/panel.js"></script>
+</head>
+<body data-panel="client">
+  <div class="shell client-shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brandmark">◈</span><div><strong>v2rayQ</strong><small>CLIENT PANEL</small></div></div>
+      <div class="sidebar-label">CONNECTION</div>
+      <nav id="navigation" aria-label="Client modules"></nav>
+      <div class="sidebar-footer"><span class="live-dot idle"></span><span>Offline</span><small>No client bridge installed</small></div>
+    </aside>
+    <main class="content">
+      <header class="topbar"><div class="breadcrumbs"><span>Client</span><b>/</b><span id="breadcrumb">Overview</span></div><div class="top-actions"><span class="environment">LOCAL PREVIEW</span><span class="avatar">Q</span></div></header>
+      <section class="page-title"><div><div class="eyebrow">NETWORK</div><h1 id="page-heading">Overview</h1><p id="page-description">A calm, unified workspace for your connections.</p></div><span class="status-pill"><span class="live-dot idle"></span> Core not connected</span></section>
+      <div id="view" aria-live="polite"></div>
+      <footer class="footer-note">Client Web UI · Layout preview; egui client is the offline-capable editor in this release</footer>
+    </main>
+  </div>
+</body>
+</html>

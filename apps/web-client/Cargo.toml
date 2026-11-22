@@ -1,0 +1,10 @@
+[package]
+name = "v2rayq-web-client"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+v2rayq-contracts = { path = "../../crates/contracts" }
+v2rayq-http-preview = { path = "../../crates/http-preview" }
