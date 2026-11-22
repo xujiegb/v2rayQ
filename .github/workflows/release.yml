@@ -25,13 +25,17 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          tar -czf dist/v2rayq-${{ runner.os }}-$(uname -m).tar.gz -C target/release v2rayq-client v2rayq-web-client v2rayq-server
+          for app in client web-client server; do
+            tar -czf "dist/v2rayq-${app}-${{ runner.os }}-$(uname -m).tar.gz" -C target/release "v2rayq-${app}"
+          done
       - name: Archive Windows binaries
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path target/release/v2rayq-client.exe,target/release/v2rayq-web-client.exe,target/release/v2rayq-server.exe -DestinationPath dist/v2rayq-Windows-x64.zip
+          foreach ($app in @('client', 'web-client', 'server')) {
+            Compress-Archive -Path "target/release/v2rayq-$app.exe" -DestinationPath "dist/v2rayq-$app-Windows-x64.zip"
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: v2rayq-${{ runner.os }}-${{ runner.arch }}
@@ -50,7 +54,9 @@ jobs:
           run: |
             cargo build --release -p v2rayq-client -p v2rayq-web-client -p v2rayq-server
             mkdir -p dist
-            tar -czf dist/v2rayq-FreeBSD-amd64.tar.gz -C target/release v2rayq-client v2rayq-web-client v2rayq-server
+            for app in client web-client server; do
+              tar -czf "dist/v2rayq-${app}-FreeBSD-amd64.tar.gz" -C target/release "v2rayq-${app}"
+            done
       - uses: actions/upload-artifact@v4
         with:
           name: v2rayq-FreeBSD-amd64
