@@ -1,15 +1,10 @@
 //! QR decoding stays in the native UI; decoded shares use the common importer.
 use super::*;
-use std::{fs::File, io::Read, path::PathBuf, sync::Arc};
+use std::{fs::File, io::Read, path::PathBuf};
 
 pub(super) enum ScanResult {
     Links(String),
     Subscription(String),
-}
-
-enum Input {
-    Path(PathBuf),
-    Bytes(Arc<[u8]>),
 }
 
 impl ClientApp {
@@ -27,7 +22,7 @@ impl ClientApp {
                 )
                 .clicked()
             {
-                source = Some(Input::Path(PathBuf::from(self.scan_path.trim())));
+                source = Some(PathBuf::from(self.scan_path.trim()));
             }
             if self.scan_job.is_some() {
                 ui.spinner();
@@ -39,20 +34,14 @@ impl ClientApp {
                 .ctx()
                 .input_mut(|input| std::mem::take(&mut input.raw.dropped_files));
             if let Some(file) = dropped.into_iter().next() {
-                source = file
-                    .path
-                    .map(Input::Path)
-                    .or_else(|| file.bytes.map(Input::Bytes));
+                source = Some(file.path().to_path_buf());
             }
         }
         if let Some(source) = source {
             let (sender, receiver) = mpsc::channel();
             let context = ui.ctx().clone();
             std::thread::spawn(move || {
-                let result = match source {
-                    Input::Path(path) => read_file(path).and_then(|bytes| decode(&bytes)),
-                    Input::Bytes(bytes) => decode(&bytes),
-                };
+                let result = read_file(source).and_then(|bytes| decode(&bytes));
                 let _ = sender.send(result);
                 context.request_repaint();
             });
