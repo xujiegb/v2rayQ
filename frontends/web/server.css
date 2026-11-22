@@ -42,7 +42,7 @@ textarea { width: 100%; min-height: 200px; padding: 10px; margin-bottom: 8px; re
 }
 .list-header { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .list-header h2 { margin: 0; }
-.editor-fields { display: grid; gap: 12px; margin-bottom: 12px; }
+.editor-fields { display: grid; gap: 12px; border: 0; padding: 0; margin: 0 0 12px; min-width: 0; }
 .editor-fields[hidden] { display: none; }
 .editor-field { display: grid; gap: 4px; color: var(--muted); font-size: 14px; font-weight: 600; }
 .editor-field input:not([type="checkbox"]) { border: 1px solid var(--edge); border-radius: 7px; width: 100%; padding: 7px 10px; font: inherit; color: var(--ink); background: #f9fbfe; }
@@ -50,3 +50,7 @@ textarea { width: 100%; min-height: 200px; padding: 10px; margin-bottom: 8px; re
 .raw-editor { margin: 0 0 12px; }
 .raw-editor summary { cursor: pointer; color: var(--accent); font-weight: 650; }
 .raw-editor[open] summary { margin-bottom: 8px; }
+.editor-field[hidden] { display: none; }
+.editor-field select { border: 1px solid var(--edge); border-radius: 7px; width: 100%; padding: 7px 10px; font: inherit; color: var(--ink); background: #f9fbfe; }
+.editor-field select:focus-visible { outline: 2px solid #23a89b; outline-offset: 2px; }
+.record-title small { display: block; color: var(--muted); }

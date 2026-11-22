@@ -130,38 +130,8 @@ impl Default for ManualNode {
 
 impl ManualNode {
     pub fn create(&self) -> Result<Node, String> {
-        let name = self.name.trim();
-        let host = self.host.trim();
-        if name.is_empty() || name.len() > 256 {
-            return Err("Enter a node name with up to 256 bytes".into());
-        }
-        let host = if host.starts_with('[') && host.ends_with(']') {
-            &host[1..host.len() - 1]
-        } else {
-            host
-        };
-        if host.is_empty()
-            || host.len() > 253
-            || (host.parse::<std::net::IpAddr>().is_err()
-                && !host.split('.').all(|label| {
-                    !label.is_empty()
-                        && label.len() <= 63
-                        && !label.starts_with('-')
-                        && !label.ends_with('-')
-                        && label
-                            .bytes()
-                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-                }))
-        {
-            return Err("Enter a hostname or IP address".into());
-        }
-        let port = self
-            .port
-            .trim()
-            .parse::<u16>()
-            .ok()
-            .filter(|port| *port != 0)
-            .ok_or("Port must be between 1 and 65535")?;
+        let (name, endpoint) = node_endpoint(&self.name, &self.host, &self.port)?;
+        let port = endpoint.port;
         let uuid = || Uuid::parse_str(self.credential.trim()).map_err(|_| "Enter a valid UUID");
         let password = || nonempty(&self.credential, "Enter a password");
         for field in [
@@ -241,8 +211,47 @@ impl ManualNode {
                 tls: tls(),
             }),
         };
-        Ok(Node::new(name, Endpoint::new(host, port), protocol))
+        Ok(Node::new(name, endpoint, protocol))
     }
+}
+
+pub(super) fn node_endpoint(
+    name: &str,
+    host: &str,
+    port: &str,
+) -> Result<(String, Endpoint), String> {
+    let name = name.trim();
+    let host = host.trim();
+    if name.is_empty() || name.len() > 256 || name.chars().any(char::is_control) {
+        return Err("Enter a node name with up to 256 bytes".into());
+    }
+    let host = if host.starts_with('[') && host.ends_with(']') {
+        &host[1..host.len() - 1]
+    } else {
+        host
+    };
+    if host.is_empty()
+        || host.len() > 253
+        || (host.parse::<std::net::IpAddr>().is_err()
+            && !host.split('.').all(|label| {
+                !label.is_empty()
+                    && label.len() <= 63
+                    && !label.starts_with('-')
+                    && !label.ends_with('-')
+                    && label
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            }))
+    {
+        return Err("Enter a hostname or IP address".into());
+    }
+    let port = port
+        .trim()
+        .parse::<u16>()
+        .ok()
+        .filter(|port| *port != 0)
+        .ok_or("Port must be between 1 and 65535")?;
+    Ok((name.to_owned(), Endpoint::new(host, port)))
 }
 
 fn nonempty(value: &str, message: &'static str) -> Result<String, &'static str> {

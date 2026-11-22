@@ -9,13 +9,13 @@ pub struct Node {
     pub protocol: Protocol,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Endpoint {
     pub host: String,
     pub port: u16,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(tag = "type", content = "options", rename_all = "snake_case")]
 pub enum Protocol {
     Vless(Vless),
@@ -26,7 +26,7 @@ pub enum Protocol {
     Hysteria2(Hysteria2),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Vless {
     pub uuid: Uuid,
     pub flow: Option<String>,
@@ -34,7 +34,7 @@ pub struct Vless {
     pub tls: Option<Tls>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Vmess {
     pub uuid: Uuid,
     pub alter_id: u16,
@@ -43,33 +43,33 @@ pub struct Vmess {
     pub tls: Option<Tls>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Trojan {
     pub password: String,
     pub transport: Option<Transport>,
     pub tls: Tls,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Shadowsocks {
     pub method: String,
     pub password: String,
     pub plugin: Option<ShadowsocksPlugin>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct ShadowsocksPlugin {
     pub name: String,
     pub options: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct AnyTls {
     pub password: String,
     pub tls: Tls,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Hysteria2 {
     pub password: Option<String>,
     pub ports: Hysteria2Ports,
@@ -77,25 +77,25 @@ pub struct Hysteria2 {
     pub tls: Tls,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Hysteria2Ports {
     Single(u16),
     Multiple(Vec<PortRange>),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct PortRange {
     pub start: u16,
     pub end: u16,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Hysteria2Obfs {
     pub kind: String,
     pub password: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Tls {
     pub server_name: Option<String>,
     pub insecure: bool,
@@ -105,13 +105,13 @@ pub struct Tls {
     pub reality: Option<Reality>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Reality {
     pub public_key: String,
     pub short_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Transport {
     WebSocket {

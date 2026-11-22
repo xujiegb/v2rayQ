@@ -3816,6 +3816,7 @@ name = "v2rayq-client"
 version = "0.1.0"
 dependencies = [
  "eframe",
+ "uuid",
  "v2rayQ",
  "v2rayq-contracts",
 ]

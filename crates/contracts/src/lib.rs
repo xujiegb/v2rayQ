@@ -37,6 +37,7 @@ pub const SERVER_NAV: &[NavItem] = &[
     NavItem { id: "nodes", title: "Nodes", detail: "Node registry", icon: "◈" },
     NavItem { id: "services", title: "Services", detail: "Service lifecycle", icon: "▤" },
     NavItem { id: "tls", title: "TLS", detail: "TLS certificates", icon: "♢" },
+    NavItem { id: "reality", title: "REALITY", detail: "REALITY profiles", icon: "◇" },
     NavItem { id: "system", title: "System", detail: "System details", icon: "▧" },
     NavItem { id: "routes", title: "Routes", detail: "Route policies", icon: "⇄" },
     NavItem { id: "dns", title: "DNS", detail: "DNS resolvers", icon: "◎" },

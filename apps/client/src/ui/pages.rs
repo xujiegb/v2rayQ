@@ -63,11 +63,16 @@ impl ClientApp {
         heading(ui, "Nodes");
         ui.horizontal_wrapped(|ui| {
             for (form, name) in [
-                (NodeForm::Share, "Import link"),
+                (NodeForm::Share, "Import links"),
                 (NodeForm::Manual, "Manual node"),
                 (NodeForm::Subscription, "Add subscription"),
             ] {
                 if ui.selectable_label(self.form == form, name).clicked() {
+                    self.endpoint_editor = None;
+                    if self.subscription_edit.take().is_some() {
+                        self.subscription_name.clear();
+                        self.subscription_url.clear();
+                    }
                     self.form = if self.form == form {
                         NodeForm::None
                     } else {
@@ -80,25 +85,64 @@ impl ClientApp {
         ui.add_enabled_ui(self.pending == 0, |ui| {
             match self.form {
                 NodeForm::Share => card(ui, |ui| {
-                    form_row(ui, "Share URI", &mut self.share_link, true);
-                    if ui.button("Import node").clicked() {
-                        let link = self.share_link.to_owned();
-                        self.send(Command::AddLink { link });
-                    }
+                    ui.strong("Import share links");
+                    ui.label("Paste one link per line or a base64 list.");
+                    ui.add(
+                        egui::TextEdit::multiline(&mut self.share_link)
+                            .password(true)
+                            .desired_rows(6)
+                            .desired_width(ui.available_width()),
+                    );
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button("Preview import").clicked() {
+                            let content = self.share_link.to_owned();
+                            self.send(Command::PreviewImport { content });
+                        }
+                        if ui.button("Import nodes").clicked() {
+                            let content = self.share_link.to_owned();
+                            self.send(Command::ImportNodes { content });
+                        }
+                    });
                 }),
                 NodeForm::Subscription => card(ui, |ui| {
-                    form_row(ui, "Name", &mut self.subscription_name, false);
-                    form_row(ui, "HTTPS URL", &mut self.subscription_url, true);
-                    if ui.button("Add and refresh").clicked() {
+                    let editing = self.subscription_edit.is_some();
+                    ui.strong(if editing {
+                        "Edit subscription"
+                    } else {
+                        "New subscription"
+                    });
+                    form_row(ui, "Name (optional)", &mut self.subscription_name, false);
+                    let caption = if editing {
+                        "New HTTPS URL (leave blank to keep current URL)"
+                    } else {
+                        "HTTPS URL"
+                    };
+                    form_row(ui, caption, &mut self.subscription_url, true);
+                    if ui
+                        .button(if editing {
+                            "Save subscription"
+                        } else {
+                            "Add and refresh"
+                        })
+                        .clicked()
+                    {
                         let name = self.subscription_name.to_owned();
                         let url = self.subscription_url.to_owned();
-                        self.send(Command::AddSubscription { name, url });
+                        let command = match self.subscription_edit {
+                            Some(id) => Command::UpdateSubscription {
+                                id,
+                                name,
+                                url: Some(url),
+                            },
+                            None => Command::AddSubscription { name, url },
+                        };
+                        self.send(command);
                     }
                 }),
                 NodeForm::Manual => card(ui, |ui| self.manual_node(ui)),
                 NodeForm::None => {}
             }
-            let mut action = None;
+            let mut action = self.endpoint_form(ui);
             card(ui, |ui| {
                 ui.strong("Saved nodes");
                 if self.profile.nodes.is_empty() {
@@ -148,8 +192,28 @@ impl ClientApp {
                             ))
                             .color(MUTED),
                         );
+                        if node.subscription_id.is_some() {
+                            if ui.small_button("Make local copy").clicked() {
+                                action = Some(Command::CopyNode { id: node.id });
+                            }
+                        } else if ui.small_button("Edit endpoint").clicked() {
+                            self.form = NodeForm::None;
+                            self.endpoint_editor = Some(EndpointEditor {
+                                id: node.id,
+                                name: node.name.to_owned(),
+                                host: node.host.to_owned(),
+                                port: node.port.to_string(),
+                            });
+                        }
                         if ui.small_button("Delete").clicked() {
                             action = Some(Command::RemoveNode { id: node.id });
+                            if self
+                                .endpoint_editor
+                                .as_ref()
+                                .is_some_and(|editor| editor.id == node.id)
+                            {
+                                self.endpoint_editor = None;
+                            }
                         }
                     });
                 }
@@ -186,7 +250,14 @@ impl ClientApp {
                 for (index, item) in self.profile.subscriptions.iter().enumerate() {
                     ui.separator();
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(&item.name);
+                        ui.strong(&item.name);
+                        ui.label(format!("{} nodes", item.node_count));
+                        if ui.small_button("Edit subscription").clicked() {
+                            self.form = NodeForm::Subscription;
+                            self.subscription_edit = Some(item.id);
+                            self.subscription_name = item.name.to_owned();
+                            self.subscription_url.clear();
+                        }
                         if let Some(error) = &item.last_error {
                             ui.label(error);
                         }
@@ -211,6 +282,33 @@ impl ClientApp {
                 self.send(action);
             }
         });
+    }
+
+    fn endpoint_form(&mut self, ui: &mut egui::Ui) -> Option<Command> {
+        let editor = self.endpoint_editor.as_mut()?;
+        let mut action = None;
+        let mut cancel = false;
+        card(ui, |ui| {
+            ui.strong("Edit node endpoint");
+            form_row(ui, "Name", &mut editor.name, false);
+            form_row(ui, "Server", &mut editor.host, false);
+            form_row(ui, "Port", &mut editor.port, false);
+            ui.horizontal(|ui| {
+                if ui.button("Save endpoint").clicked() {
+                    action = Some(Command::UpdateNode {
+                        id: editor.id,
+                        name: editor.name.to_owned(),
+                        host: editor.host.to_owned(),
+                        port: editor.port.to_owned(),
+                    });
+                }
+                cancel = ui.button("Cancel").clicked();
+            });
+        });
+        if cancel {
+            self.endpoint_editor = None;
+        }
+        action
     }
 
     fn manual_node(&mut self, ui: &mut egui::Ui) {
@@ -280,34 +378,6 @@ impl ClientApp {
                 Err(error) => self.notice = error,
             }
         }
-    }
-
-    pub(super) fn routing(&mut self, ui: &mut egui::Ui) {
-        heading(ui, "Routing");
-        card(ui, |ui| {
-            ui.label(
-                "Saved to your client profile. Applies once the Core supports these controls.",
-            );
-            let Some((mode, dns)) = self.routing.as_mut() else {
-                return;
-            };
-            ui.horizontal_wrapped(|ui| {
-                ui.selectable_value(mode, RouteMode::Direct, "Direct");
-                ui.selectable_value(mode, RouteMode::Global, "Global");
-                ui.selectable_value(mode, RouteMode::Rules, "Rule-based");
-            });
-            form_row(ui, "DNS resolver", dns, false);
-            if ui
-                .add_enabled(self.pending == 0, egui::Button::new("Save routing"))
-                .clicked()
-            {
-                let command = Command::SaveRouting {
-                    route_mode: *mode,
-                    dns_server: dns.to_owned(),
-                };
-                self.send(command);
-            }
-        });
     }
 
     pub(super) fn settings(&mut self, ui: &mut egui::Ui) {

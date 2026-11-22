@@ -4,17 +4,19 @@ use std::{
 };
 
 use eframe::egui::{self, Color32, RichText};
+use uuid::Uuid;
 use v2rayQ::{
     client::{
         Access, ClientService, Command, ManualNode, ManualTransport, Profile, ProtocolKind, Reply,
         default_data_path,
         runtime::{NetworkMode, Runtime, ServiceStatus},
     },
-    model::RouteMode,
+    model::{RouteMode, RuleDirection, RuleFields, RuleMatch, RuleTarget},
 };
 use v2rayq_contracts::CLIENT_NAV;
 
 mod pages;
+mod routes;
 mod theme;
 mod widgets;
 use widgets::{card, form_row, heading, service_label};
@@ -41,6 +43,26 @@ enum NodeForm {
     Subscription,
 }
 
+enum Completion {
+    NodeForm(NodeForm),
+    Endpoint,
+    Rule,
+    Other,
+}
+
+struct EndpointEditor {
+    id: Uuid,
+    name: String,
+    host: String,
+    port: String,
+}
+
+#[derive(Default)]
+struct RuleEditor {
+    id: Option<Uuid>,
+    fields: RuleFields,
+}
+
 pub struct ClientApp {
     page: Page,
     profile: Profile,
@@ -48,6 +70,7 @@ pub struct ClientApp {
     data_path: PathBuf,
     form: NodeForm,
     share_link: String,
+    subscription_edit: Option<Uuid>,
     subscription_name: String,
     subscription_url: String,
     manual: ManualNode,
@@ -55,10 +78,12 @@ pub struct ClientApp {
     node_page: usize,
     confirm_subscription: Option<usize>,
     routing: Option<(RouteMode, String)>,
+    endpoint_editor: Option<EndpointEditor>,
+    rule_editor: Option<RuleEditor>,
     notice: String,
     pending: usize,
     commands: Sender<Command>,
-    replies: Receiver<(NodeForm, Result<Reply, String>)>,
+    replies: Receiver<(Completion, Result<Reply, String>)>,
 }
 
 impl ClientApp {
@@ -78,14 +103,18 @@ impl ClientApp {
         let service = ClientService::new(data_path.to_owned());
         std::thread::spawn(move || {
             while let Ok(command) = requests.recv() {
-                let form = match command {
-                    Command::AddLink { .. } => NodeForm::Share,
-                    Command::AddNode { .. } => NodeForm::Manual,
-                    Command::AddSubscription { .. } => NodeForm::Subscription,
-                    _ => NodeForm::None,
+                let completion = match command {
+                    Command::ImportNodes { .. } => Completion::NodeForm(NodeForm::Share),
+                    Command::AddNode { .. } => Completion::NodeForm(NodeForm::Manual),
+                    Command::AddSubscription { .. } | Command::UpdateSubscription { .. } => {
+                        Completion::NodeForm(NodeForm::Subscription)
+                    }
+                    Command::UpdateNode { .. } => Completion::Endpoint,
+                    Command::SaveRouteRule { .. } => Completion::Rule,
+                    _ => Completion::Other,
                 };
                 if responses
-                    .send((form, service.call(command, Access::Desktop)))
+                    .send((completion, service.call(command, Access::Desktop)))
                     .is_err()
                 {
                     break;
@@ -100,6 +129,7 @@ impl ClientApp {
             data_path,
             form: NodeForm::None,
             share_link: String::new(),
+            subscription_edit: None,
             subscription_name: String::new(),
             subscription_url: String::new(),
             manual: ManualNode::default(),
@@ -107,6 +137,8 @@ impl ClientApp {
             node_page: 0,
             confirm_subscription: None,
             routing: None,
+            endpoint_editor: None,
+            rule_editor: None,
             notice: String::new(),
             pending: 0,
             commands,
@@ -126,7 +158,7 @@ impl ClientApp {
     }
 
     fn receive(&mut self) {
-        while let Ok((submitted_form, result)) = self.replies.try_recv() {
+        while let Ok((completion, result)) = self.replies.try_recv() {
             self.pending = self.pending.saturating_sub(1);
             match result {
                 Ok(reply) => {
@@ -143,16 +175,23 @@ impl ClientApp {
                     if let Some(runtime) = reply.runtime {
                         self.runtime = runtime;
                     }
-                    match submitted_form {
-                        NodeForm::Share => self.share_link.clear(),
-                        NodeForm::Subscription => {
-                            self.subscription_name.clear();
-                            self.subscription_url.clear();
+                    match completion {
+                        Completion::NodeForm(form) => {
+                            if form == NodeForm::Share {
+                                self.share_link.clear();
+                            }
+                            if form == NodeForm::Subscription {
+                                self.subscription_edit = None;
+                                self.subscription_name.clear();
+                                self.subscription_url.clear();
+                            }
+                            if self.form == form {
+                                self.form = NodeForm::None;
+                            }
                         }
-                        _ => {}
-                    }
-                    if self.form == submitted_form {
-                        self.form = NodeForm::None;
+                        Completion::Endpoint => self.endpoint_editor = None,
+                        Completion::Rule => self.rule_editor = None,
+                        Completion::Other => {}
                     }
                     if let Some(message) = reply.message {
                         self.notice = message;

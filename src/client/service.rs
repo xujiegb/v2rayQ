@@ -7,9 +7,13 @@ use std::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::import::Import;
+use super::manual::node_endpoint;
 use super::runtime::{self, NetworkMode, Runtime};
 use super::{ClientData, MAX_SUBSCRIPTION_BYTES, ManualNode, ProtocolKind, default_data_path};
-use crate::model::{RouteMode, RuntimeSettings};
+use crate::model::{
+    Hysteria2Ports, Protocol, RouteMode, RouteRule, RuleDirection, RuleFields, RuntimeSettings,
+};
 
 #[derive(Clone, Copy)]
 pub enum Access {
@@ -23,11 +27,26 @@ pub enum Access {
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Command {
     Profile,
+    PreviewImport {
+        content: String,
+    },
+    ImportNodes {
+        content: String,
+    },
     AddLink {
         link: String,
     },
     AddNode {
         node: ManualNode,
+    },
+    UpdateNode {
+        id: Uuid,
+        name: String,
+        host: String,
+        port: String,
+    },
+    CopyNode {
+        id: Uuid,
     },
     SelectNode {
         id: Uuid,
@@ -39,6 +58,11 @@ pub enum Command {
         name: String,
         url: String,
     },
+    UpdateSubscription {
+        id: Uuid,
+        name: String,
+        url: Option<String>,
+    },
     RefreshSubscription {
         id: Uuid,
     },
@@ -48,6 +72,17 @@ pub enum Command {
     SaveRouting {
         route_mode: RouteMode,
         dns_server: String,
+    },
+    SaveRouteRule {
+        id: Option<Uuid>,
+        rule: RuleFields,
+    },
+    RemoveRouteRule {
+        id: Uuid,
+    },
+    MoveRouteRule {
+        id: Uuid,
+        direction: RuleDirection,
     },
     Status,
     SetNetwork {
@@ -78,6 +113,7 @@ pub struct NodeSummary {
 pub struct SubscriptionSummary {
     pub id: Uuid,
     pub name: String,
+    pub node_count: usize,
     pub last_updated_at: Option<i64>,
     pub last_error: Option<String>,
 }
@@ -130,6 +166,26 @@ impl ClientService {
                     ..Reply::default()
                 })
             }
+            Command::PreviewImport { content } => {
+                let parsed = Import::parse(&content)?;
+                let mut data = ClientData::load(&self.path).map_err(|error| error.to_string())?;
+                Ok(Reply {
+                    message: Some(parsed.apply(&mut data, true)),
+                    ..Reply::default()
+                })
+            }
+            Command::ImportNodes { content } => {
+                let parsed = Import::parse(&content)?;
+                let (profile, message) = self.update(|data| {
+                    let message = parsed.apply(data, false);
+                    Ok((Profile::from_data(data), message))
+                })?;
+                Ok(Reply {
+                    profile: Some(profile),
+                    message: Some(message),
+                    ..Reply::default()
+                })
+            }
             Command::AddSubscription { name, url } => {
                 let id = self.update(|data| data.add_subscription(&name, &url))?;
                 self.refresh(id)
@@ -167,16 +223,27 @@ impl ClientService {
     }
 
     fn refresh(&self, id: Uuid) -> Result<Reply, String> {
-        let subscription = ClientData::load(&self.path)
-            .map_err(|error| error.to_string())?
-            .subscriptions
-            .into_iter()
-            .find(|item| item.id == id)
-            .ok_or("Subscription not found")?;
-        let download = download_subscription(&subscription.url);
+        let (url, revision) = self.update(|data| {
+            let subscription = data
+                .subscriptions
+                .iter_mut()
+                .find(|item| item.id == id)
+                .ok_or("Subscription not found")?;
+            subscription.refresh_revision = subscription
+                .refresh_revision
+                .checked_add(1)
+                .ok_or("Subscription revision exhausted")?;
+            Ok((subscription.url.to_owned(), subscription.refresh_revision))
+        })?;
+        let download = download_subscription(&url);
         let (profile, message) = self.update(|data| {
-            if !data.subscriptions.iter().any(|item| item.id == id) {
-                return Err("Subscription was deleted during refresh".into());
+            let current = data
+                .subscriptions
+                .iter()
+                .find(|item| item.id == id)
+                .ok_or("Subscription was deleted during refresh")?;
+            if current.refresh_revision != revision {
+                return Err("A newer subscription refresh or edit replaced this result".into());
             }
             let message = match download.and_then(|content| data.apply_subscription(id, &content)) {
                 Ok(count) => format!("Imported {count} nodes"),
@@ -206,6 +273,50 @@ fn edit_profile(data: &mut ClientData, action: Command) -> Result<&'static str, 
             data.add_node(node.create()?);
             Ok("Node added")
         }
+        Command::UpdateNode {
+            id,
+            name,
+            host,
+            port,
+        } => {
+            let entry = data
+                .nodes
+                .iter_mut()
+                .find(|item| item.node.id == id)
+                .ok_or("Node not found")?;
+            if entry.subscription_id.is_some() {
+                return Err("Make a local copy before editing a subscription node".into());
+            }
+            let (name, endpoint) = node_endpoint(&name, &host, &port)?;
+            if let Protocol::Hysteria2(options) = &mut entry.node.protocol {
+                match &mut options.ports {
+                    Hysteria2Ports::Single(port) => *port = endpoint.port,
+                    Hysteria2Ports::Multiple(_) if endpoint.port != entry.node.endpoint.port => {
+                        return Err(
+                            "Keep the original port for a Hysteria2 node with port hopping".into(),
+                        );
+                    }
+                    Hysteria2Ports::Multiple(_) => {}
+                }
+            }
+            entry.node.name = name;
+            entry.node.endpoint = endpoint;
+            Ok("Node updated")
+        }
+        Command::CopyNode { id } => {
+            let original = data
+                .nodes
+                .iter()
+                .find(|item| item.node.id == id)
+                .ok_or("Node not found")?;
+            let mut node = original.node.to_owned();
+            node.id = Uuid::new_v4();
+            let name = node.name.trim();
+            let end = name.floor_char_boundary(248);
+            node.name = format!("Copy of {}", &name[..end]);
+            data.add_node(node);
+            Ok("Local copy created")
+        }
         Command::SelectNode { id } => {
             if !data.nodes.iter().any(|item| item.node.id == id) {
                 return Err("Node not found".into());
@@ -216,6 +327,10 @@ fn edit_profile(data: &mut ClientData, action: Command) -> Result<&'static str, 
         Command::RemoveNode { id } => {
             data.remove_node(id);
             Ok("Node deleted")
+        }
+        Command::UpdateSubscription { id, name, url } => {
+            data.update_subscription(id, &name, url.as_deref())?;
+            Ok("Subscription saved")
         }
         Command::RemoveSubscription { id } => {
             data.remove_subscription(id);
@@ -232,8 +347,50 @@ fn edit_profile(data: &mut ClientData, action: Command) -> Result<&'static str, 
             data.settings.dns_server = dns_server.trim().to_owned();
             Ok("Routing preferences saved")
         }
+        Command::SaveRouteRule { id, rule } => {
+            let fields = rule.validate()?;
+            let rules = &mut data.settings.route_rules;
+            if let Some(id) = id {
+                let index = rule_index(rules, id)?;
+                rules[index].fields = fields;
+            } else {
+                if rules.len() >= 1000 {
+                    return Err("A profile can contain up to 1,000 route rules".into());
+                }
+                rules.push(RouteRule {
+                    id: Uuid::new_v4(),
+                    fields,
+                });
+            }
+            Ok("Route rule saved")
+        }
+        Command::RemoveRouteRule { id } => {
+            let rules = &mut data.settings.route_rules;
+            let index = rule_index(rules, id)?;
+            rules.remove(index);
+            Ok("Route rule deleted")
+        }
+        Command::MoveRouteRule { id, direction } => {
+            let rules = &mut data.settings.route_rules;
+            let index = rule_index(rules, id)?;
+            let neighbor = match direction {
+                RuleDirection::Up => index.checked_sub(1),
+                RuleDirection::Down => (index + 1 < rules.len()).then_some(index + 1),
+            };
+            if let Some(neighbor) = neighbor {
+                rules.swap(index, neighbor);
+            }
+            Ok("Route order saved")
+        }
         _ => Err("Unsupported profile operation".into()),
     }
+}
+
+fn rule_index(rules: &[RouteRule], id: Uuid) -> Result<usize, &'static str> {
+    rules
+        .iter()
+        .position(|rule| rule.id == id)
+        .ok_or("Route rule not found")
 }
 
 fn download_subscription(url: &str) -> Result<String, String> {
@@ -268,6 +425,10 @@ impl From<ClientData> for Profile {
 
 impl Profile {
     fn from_data(data: &ClientData) -> Self {
+        let mut counts = std::collections::HashMap::new();
+        for id in data.nodes.iter().filter_map(|node| node.subscription_id) {
+            *counts.entry(id).or_insert(0) += 1;
+        }
         Self {
             nodes: data
                 .nodes
@@ -287,6 +448,7 @@ impl Profile {
                 .map(|entry| SubscriptionSummary {
                     id: entry.id,
                     name: entry.name.to_owned(),
+                    node_count: counts.get(&entry.id).copied().unwrap_or_default(),
                     last_updated_at: entry.last_updated_at,
                     last_error: entry
                         .last_error
@@ -297,5 +459,73 @@ impl Profile {
             selected_node: data.selected_node,
             settings: data.settings.to_owned(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copying_a_subscription_node_preserves_options_and_survives_refresh() -> Result<(), String> {
+        let mut data = ClientData::default();
+        let subscription = data.add_subscription("Test", "https://example.org/sub")?;
+        let share = "trojan://secret@example.org:443?type=ws&path=%2Fsocket&security=tls#Test";
+        data.apply_subscription(subscription, share)?;
+        let id = data
+            .selected_node
+            .ok_or("The imported node should be selected")?;
+        let edit = |id| Command::UpdateNode {
+            id,
+            name: "Updated".into(),
+            host: "proxy.example.org".into(),
+            port: "8443".into(),
+        };
+        assert!(edit_profile(&mut data, edit(id)).is_err());
+        edit_profile(&mut data, Command::CopyNode { id })?;
+        let copy_id = data.selected_node.ok_or("The copy should be selected")?;
+        assert_ne!(id, copy_id);
+        edit_profile(&mut data, edit(copy_id))?;
+        data.apply_subscription(subscription, share)?;
+        let local = data
+            .nodes
+            .iter()
+            .find(|item| item.node.id == copy_id)
+            .ok_or("Missing local copy")?;
+        let subscribed = data
+            .nodes
+            .iter()
+            .find(|item| item.subscription_id == Some(subscription))
+            .ok_or("Missing subscription node")?;
+        assert_eq!(local.node.name, "Updated");
+        assert_eq!(local.node.endpoint.host, "proxy.example.org");
+        assert_eq!(local.node.protocol, subscribed.node.protocol);
+        assert_eq!(data.selected_node, Some(copy_id));
+        Ok(())
+    }
+
+    #[test]
+    fn editing_a_single_port_hysteria_node_updates_both_port_fields() -> Result<(), String> {
+        let mut data = ClientData::default();
+        data.add_share_link("hy2://secret@example.org:443/#Example")?;
+        let id = data
+            .selected_node
+            .ok_or("The imported node should be selected")?;
+        edit_profile(
+            &mut data,
+            Command::UpdateNode {
+                id,
+                name: "Example".into(),
+                host: "example.org".into(),
+                port: "8443".into(),
+            },
+        )?;
+        let node = &data.nodes.first().ok_or("Missing node")?.node;
+        let Protocol::Hysteria2(config) = &node.protocol else {
+            return Err("Expected a Hysteria2 node".into());
+        };
+        assert_eq!(node.endpoint.port, 8443);
+        assert_eq!(config.ports, Hysteria2Ports::Single(8443));
+        Ok(())
     }
 }

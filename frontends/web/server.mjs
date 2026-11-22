@@ -1,5 +1,5 @@
 import { transport } from "./transport.mjs";
-import { fields, defaults } from "./server-fields.mjs";
+import { fields, defaults, choices } from "./server-fields.mjs";
 
 const serverPages = [
   ["overview", "Overview", "⌂", "Status"],
@@ -8,8 +8,9 @@ const serverPages = [
   ["outbounds", "Outbounds", "⇤", "Endpoints"],
   ["nodes", "Nodes", "◇", "Endpoints"],
   ["services", "Services", "▤", "System"],
-  ["tls", "TLS", "♢", "System"],
-  ["system", "System", "▧", "System"],
+  ["tls", "TLS", "♢", "Security"],
+  ["reality", "REALITY", "◇", "Security"],
+  ["system", "System", "▧", "Host"],
   ["routes", "Routes", "⇄", "Policies"],
   ["dns", "DNS", "◎", "Policies"],
   ["administrators", "Administrators", "♙", "Administration"],
@@ -61,12 +62,12 @@ function overview(status) {
     infoRow("Administrative access", "Local launch session or Cockpit"))];
 }
 
-function editor(section, title, draft) {
+function editor(section, title, draft, profiles = {}) {
   const isList = Array.isArray(draft.value);
   const layout = element("div", "editor-layout");
   const controls = element("div", "actions");
   const form = element("form", "editor-form");
-  const inputs = element("div", "editor-fields");
+  const inputs = element("fieldset", "editor-fields");
   const advanced = element("details", "raw-editor");
   const textarea = element("textarea");
   textarea.setAttribute("aria-label", `${title} JSON`);
@@ -79,42 +80,96 @@ function editor(section, title, draft) {
   let index = null;
   let saving = false;
 
+  function refreshFields() {
+    const value = key => {
+      const input = inputs.elements.namedItem(key);
+      return input?.value || "";
+    };
+    for (const [key, , , visible] of fields[section]) {
+      if (!visible) continue;
+      const input = inputs.elements.namedItem(key);
+      if (!input) continue;
+      const [parent, allowed] = visible;
+      input.disabled = !allowed.includes(value(parent));
+      if (parent === "transport" && !["vless", "vmess", "trojan"].includes(value("protocol"))) input.disabled = true;
+      input.parentElement.hidden = input.disabled;
+    }
+    const options = inputs.querySelector("datalist");
+    if (options) {
+      const names = profiles[value("security")];
+      options.replaceChildren(...(Array.isArray(names) ? names : []).map(name => {
+        const option = element("option");
+        option.value = name;
+        return option;
+      }));
+    }
+  }
+
   function drawFields() {
     inputs.replaceChildren();
     for (const [key, title, kind] of fields[section]) {
-      const value = current[key];
+      const value = key === "protocol" ? current.protocol ?? current.type : current[key];
       const compatible = value === undefined || (kind === "list" && Array.isArray(value) && value.every(item => typeof item === "string"))
         || (kind === "port" && typeof value === "number") || (kind === "boolean" && typeof value === "boolean")
-        || (!kind && typeof value === "string");
+        || (kind !== "list" && kind !== "port" && kind !== "boolean" && typeof value === "string");
       if (!compatible) continue; // Keep structured or legacy values editable in the JSON view.
       const wrapper = element("label", "editor-field", title);
-      const input = element("input");
+      const select = choices[kind];
+      const input = element(select ? "select" : "input");
       input.name = key;
-      if (kind === "boolean") {
+      if (select) {
+        input.setAttribute("aria-label", title);
+        const values = new Map(Object.entries(select));
+        if (value && !values.has(value)) values.set(value, value);
+        const empty = element("option", "", "Select…");
+        empty.value = "";
+        input.append(empty);
+        for (const [id, label] of values) {
+          const option = element("option", "", label);
+          option.value = id;
+          input.append(option);
+        }
+        input.value = value ?? "";
+      } else if (kind === "boolean") {
         input.type = "checkbox";
         input.checked = value === true;
         input.indeterminate = value === undefined;
       } else {
-        input.type = kind === "port" ? "number" : "text";
+        input.type = kind === "port" ? "number" : kind === "secret" ? "password" : "text";
         if (kind === "port") { input.min = "1"; input.max = "65535"; }
+        if (kind === "secret") input.autocomplete = "new-password";
         if (kind === "list") input.placeholder = "Separate values with commas";
+        if (kind === "profile") input.setAttribute("list", "security-profiles");
         input.value = Array.isArray(value) ? value.join(", ") : value ?? "";
       }
-      input.oninput = () => { input.dataset.edited = "true"; };
+      input.oninput = () => { input.dataset.edited = "true"; if (select) refreshFields(); };
       wrapper.append(input);
       inputs.append(wrapper);
     }
+    if (section === "nodes") {
+      const options = element("datalist");
+      options.id = "security-profiles";
+      inputs.append(options);
+    }
+    refreshFields();
   }
 
   function fieldValues() {
     const value = { ...current };
-    for (const [key, , kind] of fields[section]) {
-      const input = inputs.querySelector(`[name="${key}"]`);
-      if (!input || input.dataset.edited !== "true" || input.indeterminate) continue;
+    for (const [key, , kind, visible] of fields[section]) {
+      const input = inputs.elements.namedItem(key);
+      if (!input || input.indeterminate) continue;
+      if (input.disabled) {
+        const parent = inputs.elements.namedItem(visible?.[0] || "");
+        const protocol = inputs.elements.namedItem("protocol");
+        if (parent?.dataset.edited === "true" || (visible?.[0] === "transport" && protocol?.dataset.edited === "true")) delete value[key];
+        continue;
+      }
+      if (input.dataset.edited !== "true") continue;
       if (kind === "boolean") value[key] = input.checked;
       else if (!input.value.trim()) delete value[key];
       else if (kind === "list") value[key] = input.value.split(",").map(item => item.trim()).filter(Boolean);
-      else value[key] = kind === "port" ? input.valueAsNumber : input.value.trim();
+      else value[key] = kind === "port" ? input.valueAsNumber : kind === "secret" ? input.value : input.value.trim();
     }
     return value;
   }
@@ -190,7 +245,16 @@ function editor(section, title, draft) {
       operations.append(button("Edit", () => start(record, i)), button("Delete", () => {
         if (!saving && window.confirm(`Delete ${name}?`)) save(draft.value.filter((_, position) => position !== i));
       }, "danger"));
-      row.append(element("strong", "", name), operations);
+      const details = element("div", "record-title");
+      details.append(element("strong", "", name));
+      if (section === "nodes") {
+        const endpoint = typeof record.server === "string" && record.server_port ? `${record.server}:${record.server_port}` : record.server;
+        const protocol = record.protocol || record.type;
+        const summary = [choices.protocol[protocol] || protocol, endpoint, choices.security[record.security]]
+          .filter(value => typeof value === "string" && value).join(" · ");
+        if (summary) details.append(element("small", "", summary));
+      }
+      row.append(details, operations);
       list.append(row);
     });
   }
@@ -235,14 +299,17 @@ async function open(key) {
   view.replaceChildren();
   notice.textContent = "";
   try {
-    const value = await send(key === "overview" || key === "system" ? { action: key } : { action: "load", section: key });
+    const command = key === "overview" || key === "system" ? { action: key } : { action: "load", section: key };
+    const [value, profiles] = await Promise.all([
+      send(command), key === "nodes" ? send({ action: "security_profiles" }) : undefined
+    ]);
     if (request !== active) return;
     if (key === "overview") view.append(...overview(value));
     else if (key === "system") view.append(panel("Host", infoRow("Operating system", value.os),
       infoRow("Architecture", value.architecture), infoRow("Logical CPUs", value.logical_cpus), infoRow("Panel version", value.version)));
     else {
       if (key === "services") view.append(panel("Core service", infoRow("Adapter", "Unavailable")));
-      view.append(...editor(key, page[1], value));
+      view.append(...editor(key, page[1], value, profiles));
     }
   } catch (error) {
     if (request === active) notice.textContent = error.message;
