@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
-"""Verify that native, web and LuCI navigation maintain identical labels."""
+"""Keep shared client navigation aligned with the native app and server navigation."""
 from pathlib import Path
 import re
 
 root = Path(__file__).resolve().parents[1]
-rust = (root / "crates/contracts/src/lib.rs").read_text()
-js = (root / "frontends/shared/panel.js").read_text()
-luci = (root / "frontends/luci/htdocs/luci-static/resources/view/v2rayq/client.js").read_text()
+contracts = (root / "crates/contracts/src/lib.rs").read_text()
+client = (root / "frontends/luci/htdocs/luci-static/resources/v2rayq/client-ui.js").read_text()
+server = (root / "frontends/web/server.mjs").read_text()
 
-def titles(text, start, end):
-    fragment = text.split(start, 1)[1].split(end, 1)[0]
-    return re.findall(r'title: "([^"]+)"', fragment)
 
-client = titles(rust, "pub const CLIENT_NAV:", "pub const SERVER_NAV:")
-server = titles(rust, "pub const SERVER_NAV:", "pub trait CoreBackend")
+def native(start, end):
+    block = contracts.split(start, 1)[1].split(end, 1)[0]
+    return re.findall(r'id: "([^"]+)",\s*title: "([^"]+)"', block)
 
-js_client = re.findall(r'\["([^"]+)","[^"]+","[^"]+"\]', js.split("const clientPages = [", 1)[1].split("];", 1)[0])
-js_server = re.findall(r'\["([^"]+)","[^"]+","[^"]+"\]', js.split("const serverPages = [", 1)[1].split("];", 1)[0])
-luci_client = re.findall(r"\['([^']+)', '[^']+', '[^']+'\]", luci.split("var sections = [", 1)[1].split("];", 1)[0])
 
-assert client == js_client, (client, js_client)
-assert server == js_server, (server, js_server)
-assert client == luci_client, (client, luci_client)
-print("Client / server / Cockpit / LuCI navigation titles match")
+def web(source, array):
+    block = source.split(f"const {array} = [", 1)[1].split("];", 1)[0]
+    return re.findall(r'\["([^"]+)", "([^"]+)",', block)
+
+
+assert native("pub const CLIENT_NAV:", "pub const SERVER_NAV:") == web(client, "clientPages")
+assert native("pub const SERVER_NAV:", "pub trait CoreBackend") == web(server, "serverPages")
+assert "./client-ui.js" in (root / "frontends/web/client-entry.mjs").read_text()
+assert "v2rayq/client-ui.js" in (root / "frontends/luci/htdocs/luci-static/resources/view/v2rayq/client.js").read_text()
+assert "client-ui.js" in (root / "frontends/cockpit/install.sh").read_text()
+print("Desktop / Web / Cockpit / LuCI navigation parity: OK")

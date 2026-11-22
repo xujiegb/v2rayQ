@@ -1,0 +1,15 @@
+#!/bin/sh
+if [ "$1" = list ]; then
+    printf '%s\n' '{"profile":{"command":"String"},"service":{"command":"String"}}'
+    exit 0
+fi
+if [ "$1" != call ]; then exit 1; fi
+if [ ! -x /usr/bin/v2rayq-cli ]; then
+    printf '%s\n' '{"error":"Install the target-architecture v2rayq-cli in /usr/bin"}'
+    exit 0
+fi
+case "$2" in
+    profile) V2RAYQ_CLIENT_DB=/etc/v2rayq/client.redb exec /usr/bin/v2rayq-cli --luci-rpc ;;
+    service) exec /usr/bin/v2rayq-cli --luci-service-rpc ;;
+    *) exit 1 ;;
+esac

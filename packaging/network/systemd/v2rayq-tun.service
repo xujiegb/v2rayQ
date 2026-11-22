@@ -1,0 +1,9 @@
+[Unit]
+Description=v2rayQ TUN proxy
+After=network-online.target
+Wants=network-online.target
+Conflicts=v2rayq-transparent.service
+
+[Service]
+ExecStart=/usr/bin/sing-box run -c /etc/v2rayq/tun.json
+TimeoutStopSec=15s
