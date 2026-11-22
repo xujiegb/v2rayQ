@@ -1,12 +1,55 @@
 #![forbid(unsafe_code)]
 
+use serde_json::json;
+use v2rayQ::client::{Access, ClientService, Command};
 use v2rayq_contracts::WEB_CLIENT_PORT;
-use v2rayq_http_preview::{Panel, serve};
+use v2rayq_http_preview::{Asset, Panel, serve};
+
+const ASSETS: &[Asset] = &[
+    Asset {
+        path: "/assets/client-ui.js",
+        mime: "text/javascript; charset=utf-8",
+        body: include_str!(
+            "../../../frontends/luci/htdocs/luci-static/resources/v2rayq/client-ui.js"
+        ),
+    },
+    Asset {
+        path: "/assets/client.css",
+        mime: "text/css; charset=utf-8",
+        body: include_str!(
+            "../../../frontends/luci/htdocs/luci-static/resources/v2rayq/client.css"
+        ),
+    },
+    Asset {
+        path: "/assets/client-entry.mjs",
+        mime: "text/javascript; charset=utf-8",
+        body: include_str!("../../../frontends/web/client-entry.mjs"),
+    },
+    Asset {
+        path: "/assets/transport.mjs",
+        mime: "text/javascript; charset=utf-8",
+        body: include_str!("../../../frontends/shared/transport.mjs"),
+    },
+];
 
 fn main() -> std::io::Result<()> {
-    // Independent Web client, no server admin panel bundled.
-    serve(Panel {
-        title: "Client",
-        html: include_str!("../../../frontends/web/client.html"),
-    }, WEB_CLIENT_PORT)
+    let client = ClientService::default();
+    serve(
+        Panel {
+            title: "Client",
+            html: include_str!("../../../frontends/web/client.html"),
+            assets: ASSETS,
+        },
+        WEB_CLIENT_PORT,
+        move |body| {
+            match serde_json::from_slice::<Command>(body) {
+                Ok(command) => match client.call(command, Access::Desktop) {
+                    Ok(result) => json!({ "result": result }),
+                    Err(error) => json!({ "error": error }),
+                },
+                Err(_) => json!({ "error": "Invalid client command" }),
+            }
+            .to_string()
+        },
+    )
 }

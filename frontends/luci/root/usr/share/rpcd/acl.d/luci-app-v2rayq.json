@@ -1,0 +1,10 @@
+{
+  "luci-app-v2rayq": {
+    "description": "Manage v2rayQ client profiles and refresh subscriptions",
+    "write": { "ubus": { "v2rayq": ["profile"] } }
+  },
+  "luci-app-v2rayq-services": {
+    "description": "Start or stop the administrator-provisioned v2rayQ network services",
+    "write": { "ubus": { "v2rayq": ["service"] } }
+  }
+}

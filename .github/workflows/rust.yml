@@ -18,7 +18,8 @@ jobs:
       - run: cargo check -p v2rayQ --features legacy-tui
       - run: cargo test -p v2rayq-contracts
       - run: cargo test -p v2rayq-http-preview
-      - run: cargo check -p v2rayq-server -p v2rayq-web-client
+      - run: cargo build --locked -p v2rayq-server -p v2rayq-web-client -p v2rayq-cli
+      - run: python3 tools/test_panel_api.py
       - run: python3 tools/check_ui_parity.py
       - run: python3 tools/check_workspace_boundaries.py
       - name: Check first-party safe Rust policy
@@ -41,7 +42,7 @@ jobs:
       - name: Install Linux native window dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
-      - run: cargo check -p v2rayq-client -p v2rayq-web-client -p v2rayq-server
+      - run: cargo check --locked -p v2rayq-client -p v2rayq-web-client -p v2rayq-server -p v2rayq-cli
   android-native-ui:
     name: Android arm64 egui Rust library
     runs-on: ubuntu-latest
@@ -63,14 +64,19 @@ jobs:
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$llvm/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
       - run: cargo check -p v2rayq-client --no-default-features --lib --target aarch64-linux-android
   ios-native-ui:
-    name: iOS arm64 egui Rust library
+    name: iOS arm64 native egui simulator bundle
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-ios
-      - run: cargo check -p v2rayq-client --no-default-features --lib --target aarch64-apple-ios
+          targets: aarch64-apple-ios-sim
+      - run: sh packaging/mobile/ios/build.sh aarch64-apple-ios-sim
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v2rayq-ios-simulator
+          path: dist/aarch64-apple-ios-sim/v2rayQ.app
+          if-no-files-found: error
   freebsd:
     name: FreeBSD 15 native and local services
     runs-on: ubuntu-latest
@@ -82,5 +88,5 @@ jobs:
           prepare: |
             pkg install -y rust pkgconf libxkbcommon wayland libX11 libxcb libXcursor libXi libXrandr
           run: |
-            cargo check -p v2rayq-web-client -p v2rayq-server
+            cargo check --locked -p v2rayq-web-client -p v2rayq-server -p v2rayq-cli
             cargo check -p v2rayq-client
