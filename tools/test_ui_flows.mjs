@@ -89,6 +89,14 @@ try {
   await page.waitForFunction(() => document.querySelector('[name="group-filter"]').textContent.includes("Travel · 1"));
   await page.getByLabel("Node groups", { exact: true }).selectOption({ label: "Travel · 1" });
   await page.getByText("Example node", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Manual node", exact: true }).click();
+  await page.getByLabel("Protocol", { exact: true }).selectOption("trojan");
+  await page.getByLabel("Name", { exact: true }).fill("Grouped addition");
+  await page.getByLabel("Server", { exact: true }).fill("grouped.example.org");
+  await page.getByLabel("Password", { exact: true }).fill("group-secret");
+  await page.getByRole("button", { name: "Save node", exact: true }).click();
+  await page.getByText("Grouped addition", { exact: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector('[name="group-filter"]').textContent.includes("Travel · 2"));
   await page.screenshot({ path: join(output, "client-groups.png") });
   await page.getByLabel("Node groups", { exact: true }).selectOption("subscriptions");
   await page.getByText("No nodes saved.", { exact: true }).waitFor();
@@ -98,7 +106,7 @@ try {
   await page.getByRole("button", { name: "Rename group", exact: true }).click();
   await page.getByLabel("Group name", { exact: true }).fill("Work");
   await page.getByRole("button", { name: "Save group", exact: true }).click();
-  await page.waitForFunction(() => document.querySelector('[name="group-filter"]').textContent.includes("Work · 1"));
+  await page.waitForFunction(() => document.querySelector('[name="group-filter"]').textContent.includes("Work · 2"));
   await page.reload();
   await page.getByRole("button", { name: "Manage nodes", exact: true }).click();
   await page.getByLabel("Group for Example node", { exact: true }).selectOption({ label: "Work" });

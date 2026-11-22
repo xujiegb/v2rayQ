@@ -206,4 +206,16 @@ with tempfile.TemporaryDirectory() as directory:
         assert len(command(port, token, {"action": "profile"})[1]["result"]["profile"]["groups"]) == 1
         runtime = command(port, token, {"action": "status"})[1]["result"]["runtime"]
         assert runtime["traffic"] == {"core_connected": False, "upload_bps": None, "download_bps": None}
+        group = profile["groups"][0]["id"]
+        result = command(port, token, {
+            "action": "add_node", "group_id": group,
+            "node": {"protocol": "trojan", "name": "Grouped", "host": "grouped.example.org", "port": "443", "credential": "secret"}
+        })[1]["result"]["profile"]
+        assert next(node for node in result["nodes"] if node["name"] == "Grouped")["group_id"] == group
+        result = command(port, token, {"action": "import_nodes", "group_id": group, "content": "trojan://other@batch.example.org:443#Batch"})[1]["result"]["profile"]
+        assert next(node for node in result["nodes"] if node["name"] == "Batch")["group_id"] == group
+        count = len(result["nodes"])
+        missing = "00000000-0000-4000-8000-000000000001"
+        assert "error" in command(port, token, {"action": "import_nodes", "group_id": missing, "content": "trojan://secret@new.example.org:443#Invalid"})[1]
+        assert len(command(port, token, {"action": "profile"})[1]["result"]["profile"]["nodes"]) == count
 print("Node group lifecycle, configuration membership and unavailable telemetry: OK")

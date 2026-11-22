@@ -48,7 +48,10 @@ impl ClientApp {
                         }
                         if ui.button(tr.text("Import nodes")).clicked() {
                             let content = self.share_link.to_owned();
-                            self.send(Command::ImportNodes { content });
+                            self.send(Command::ImportNodes {
+                                content,
+                                group_id: Uuid::parse_str(&self.group_filter).ok(),
+                            });
                         }
                     });
                 }),
@@ -373,7 +376,10 @@ impl ClientApp {
             match self.manual.create() {
                 Ok(_) => {
                     let node = std::mem::take(&mut self.manual);
-                    self.send(Command::AddNode { node });
+                    self.send(Command::AddNode {
+                        node,
+                        group_id: Uuid::parse_str(&self.group_filter).ok(),
+                    });
                 }
                 Err(error) => self.notice = error,
             }

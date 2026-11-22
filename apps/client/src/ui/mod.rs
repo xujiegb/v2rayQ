@@ -229,6 +229,14 @@ impl ClientApp {
                     }
                     match completion {
                         Completion::NodeForm(form) => {
+                            if matches!(form, NodeForm::Manual | NodeForm::Share)
+                                && self.group_filter.starts_with("subscription")
+                            {
+                                self.group_filter = "local".into();
+                            }
+                            if form == NodeForm::Subscription && self.subscription_edit.is_none() {
+                                self.group_filter = "subscriptions".into();
+                            }
                             if form == NodeForm::Share {
                                 self.share_link.clear();
                             }

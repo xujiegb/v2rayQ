@@ -53,12 +53,16 @@ pub enum Command {
     },
     ImportNodes {
         content: String,
+        #[serde(default)]
+        group_id: Option<Uuid>,
     },
     AddLink {
         link: String,
     },
     AddNode {
         node: ManualNode,
+        #[serde(default)]
+        group_id: Option<Uuid>,
     },
     UpdateNode {
         id: Uuid,
@@ -240,14 +244,14 @@ impl ClientService {
                 let parsed = Import::parse(&content)?;
                 let mut data = ClientData::load(&self.path).map_err(|error| error.to_string())?;
                 Ok(Reply {
-                    message: Some(parsed.apply(&mut data, true)),
+                    message: Some(parsed.apply(&mut data, true, None)?),
                     ..Reply::default()
                 })
             }
-            Command::ImportNodes { content } => {
+            Command::ImportNodes { content, group_id } => {
                 let parsed = Import::parse(&content)?;
                 let (profile, message) = self.update(|data| {
-                    let message = parsed.apply(data, false);
+                    let message = parsed.apply(data, false, group_id)?;
                     Ok((Profile::from_data(data), message))
                 })?;
                 Ok(Reply {
@@ -351,8 +355,14 @@ fn edit_profile(data: &mut ClientData, action: Command) -> Result<&'static str, 
                 .map_err(|_| "Invalid or unsupported share link")?;
             Ok("Node added")
         }
-        Command::AddNode { node } => {
-            data.add_node(node.create()?);
+        Command::AddNode { node, group_id } => {
+            if group_id.is_some_and(|id| !data.groups.iter().any(|group| group.id == id)) {
+                return Err("Group not found".into());
+            }
+            let node = node.create()?;
+            let id = node.id;
+            data.add_node(node);
+            data.assign_group(id, group_id)?;
             Ok("Node added")
         }
         Command::UpdateNode {

@@ -65,7 +65,7 @@ The client's Overview puts the installed proxy service switch, current profile n
 
 Client and server browser forms confirm before discarding edits during navigation. Editors use a consistent save/cancel flow.
 
-Nodes can be filtered by local origin, all subscriptions, a specific subscription or a custom group. Create, rename and remove groups, then move nodes using the row selector. Groups preserve subscription ownership; an unchanged subscription node keeps its group after a refresh. Removing a group retains its nodes. Portable export and merge include groups and memberships.
+Nodes can be filtered by local origin, all subscriptions, a specific subscription or a custom group. Create, rename and remove groups, then move nodes using the row selector. New manual and imported nodes enter the selected custom group in the same transaction. Groups preserve subscription ownership; an unchanged subscription node keeps its group after a refresh. Removing a group retains its nodes. Portable export and merge include groups and memberships.
 
 The native **Scan QR code** editor reads a PNG/JPEG file path or a dropped image in a background worker. It previews recognized shares through the common importer and opens recognized HTTPS subscriptions for confirmation. Images are bounded to 8 MiB, 4096 × 4096 and a decoder allocation limit. This pass supplies image scanning; camera capture belongs to the mobile host integration.
 

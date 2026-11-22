@@ -224,6 +224,14 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     return card("", wrapper);
   }
 
+  function destinationGroup() {
+    return (state.profile?.groups || []).some(group => group.id === state.groupFilter) ? state.groupFilter : null;
+  }
+
+  function revealLocalNodes() {
+    if (state.groupFilter.startsWith("subscription")) state.groupFilter = "local";
+  }
+
   function groupMatches(node) {
     const filter = state.groupFilter;
     if (!filter) return true;
@@ -268,7 +276,9 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     form.append(label, source, actions);
     form.onsubmit = event => {
       event.preventDefault();
-      perform({ action: "import_nodes", content: text.value }, () => { state.form = ""; });
+      perform({ action: "import_nodes", content: text.value, group_id: destinationGroup() }, () => {
+        state.form = ""; revealLocalNodes();
+      });
     };
     form.append(button("Cancel", () => { if (!confirmLeave()) return; state.form = ""; render(); }));
     return card("Import share links", form);
@@ -287,7 +297,10 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
       const command = subscription
         ? { action: "update_subscription", id: subscription.id, ...values }
         : { action: "add_subscription", ...values };
-      perform(command, () => { state.form = ""; state.editingSubscription = null; });
+      perform(command, () => {
+        state.form = ""; state.editingSubscription = null;
+        if (!subscription) state.groupFilter = "subscriptions";
+      });
     };
     const editor = card(subscription ? "Edit subscription" : "New subscription", form);
     editor.dataset.editor = "subscription";
@@ -340,7 +353,9 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
       event.preventDefault();
       const values = Object.fromEntries(new FormData(form));
       values.tls = values.tls === "on";
-      perform({ action: "add_node", node: values }, () => { state.form = ""; });
+      perform({ action: "add_node", node: values, group_id: destinationGroup() }, () => {
+        state.form = ""; revealLocalNodes();
+      });
     };
     return card("Manual node", form);
   }
