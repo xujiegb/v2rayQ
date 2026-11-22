@@ -1,8 +1,6 @@
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let _connection = v2rayQ::db::open("v2rayQ.db").await?;
+#![forbid(unsafe_code)]
 
-    v2rayQ::cli::run()?;
-
-    Ok(())
+// Optional terminal UI. No async SQL runtime or Turso dependency.
+fn main() -> std::io::Result<()> {
+    v2rayQ::cli::run()
 }

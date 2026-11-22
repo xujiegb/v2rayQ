@@ -33,43 +33,28 @@ pub struct ClientData {
 }
 
 impl ClientData {
+    /// Reads redb state, importing a former client.json once if present.
+    /// The JSON file is retained as a backup and is never deleted on migration.
     pub fn load(path: &Path) -> io::Result<Self> {
-        match fs::read(path) {
-            Ok(bytes) => serde_json::from_slice(&bytes)
-                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error)),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Self::default()),
-            Err(error) => Err(error),
+        if !path.exists() {
+            let old_path = path.with_extension("json");
+            if old_path != path && old_path.exists() {
+                let bytes = fs::read(&old_path)?;
+                let data: Self = serde_json::from_slice(&bytes)
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+                data.save(path)?;
+                return Ok(data);
+            }
+            return Ok(Self::default());
         }
+        let database = v2rayq_storage::Storage::open(path).map_err(io::Error::other)?;
+        Ok(database.get("client/state").map_err(io::Error::other)?.unwrap_or_default())
     }
 
+    /// Stores a single atomic versioned document in an ACID redb transaction.
     pub fn save(&self, path: &Path) -> io::Result<()> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let bytes = serde_json::to_vec_pretty(self).map_err(io::Error::other)?;
-        let tmp = path.with_extension("json.tmp");
-        let mut file = fs::OpenOptions::new()
-            .write(true).create(true).truncate(true).open(&tmp)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            // Store proxy secrets in a file accessible only by this user.
-            file.set_permissions(fs::Permissions::from_mode(0o600))?;
-        }
-        std::io::Write::write_all(&mut file, &bytes)?;
-        file.sync_all()?;
-        drop(file);
-        #[cfg(not(windows))]
-        fs::rename(&tmp, path)?;
-        #[cfg(windows)]
-        {
-            // Windows cannot always atomically replace an existing file.
-            if fs::rename(&tmp, path).is_err() {
-                fs::copy(&tmp, path)?;
-                fs::remove_file(&tmp)?;
-            }
-        }
-        Ok(())
+        let database = v2rayq_storage::Storage::open(path).map_err(io::Error::other)?;
+        database.put("client/state", self).map_err(io::Error::other)
     }
 
     pub fn add_node(&mut self, node: Node) {
@@ -153,15 +138,20 @@ impl ClientData {
 pub fn default_data_path() -> PathBuf {
     #[cfg(target_os = "windows")]
     if let Some(dir) = std::env::var_os("APPDATA") {
-        return PathBuf::from(dir).join("v2rayQ").join("client.json");
+        return PathBuf::from(dir).join("v2rayQ").join("client.redb");
+    }
+    #[cfg(target_os = "macos")]
+    if let Some(home) = std::env::var_os("HOME") {
+        return PathBuf::from(home).join("Library").join("Application Support")
+            .join("v2rayQ").join("client.redb");
     }
     if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
-        return PathBuf::from(dir).join("v2rayQ").join("client.json");
+        return PathBuf::from(dir).join("v2rayQ").join("client.redb");
     }
     if let Some(home) = std::env::var_os("HOME") {
-        return PathBuf::from(home).join(".config").join("v2rayQ").join("client.json");
+        return PathBuf::from(home).join(".config").join("v2rayQ").join("client.redb");
     }
-    PathBuf::from("v2rayQ-client.json")
+    PathBuf::from("v2rayQ-client.redb")
 }
 
 /// Handles newline-delimited share links or base64-wrapped link lists.

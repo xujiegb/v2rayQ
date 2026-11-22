@@ -216,7 +216,7 @@ mod tests {
     #[test]
     fn parses_base64url_user_info() {
         let node = parse(
-            "ss://YWVzLTEyOC04LWdjbTp0ZXN0@192.168.100.1:8888#Example1",
+            "ss://YWVzLTEyOC1nY206dGVzdA@192.168.100.1:8888#Example1",
         )
         .unwrap();
 

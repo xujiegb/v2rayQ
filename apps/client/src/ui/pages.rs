@@ -194,7 +194,7 @@ impl ClientApp {
         ui.label(format!("Configuration: {}", self.data_path.display()));
         ui.checkbox(&mut self.show_secrets, "Show advanced connection information");
         if self.show_secrets {
-            ui.label("Share URLs, subscription tokens and node passwords are stored in the local JSON file. Protect your user profile.");
+            ui.label("Share URLs, subscription tokens and node passwords are stored in the private redb database. Protect your user profile.");
         }
     }
 }

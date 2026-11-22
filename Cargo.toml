@@ -1,5 +1,13 @@
 [workspace]
-members = [".", "apps/client", "apps/server", "apps/web-client", "crates/contracts", "crates/http-preview"]
+members = [
+    ".",
+    "apps/client",
+    "apps/server",
+    "apps/web-client",
+    "crates/contracts",
+    "crates/http-preview",
+    "crates/storage",
+]
 resolver = "3"
 
 [workspace.package]
@@ -16,10 +24,7 @@ license.workspace = true
 
 [features]
 default = []
-# Existing command-line interface and Turso storage are kept for migration,
-# but cannot block builds of the native and web applications.
-legacy-tui = ["database", "dep:crossterm", "dep:ratatui", "dep:tokio"]
-database = ["dep:turso"]
+legacy-tui = ["dep:crossterm", "dep:ratatui"]
 
 [[bin]]
 name = "v2rayq-tui"
@@ -33,7 +38,6 @@ ratatui = { version = "0.30.2", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"], optional = true }
-turso = { version = "0.8.4", optional = true }
 url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
+v2rayq-storage = { path = "crates/storage" }

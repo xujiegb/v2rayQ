@@ -130,7 +130,7 @@ impl ClientApp {
 
     fn side_navigation(&mut self, root_ui: &mut egui::Ui) {
         if root_ui.available_width() < 720.0 {
-            egui::TopBottomPanel::top("mobile_navigation").show_inside(root_ui, |ui| {
+            egui::Panel::top("mobile_navigation").show(root_ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     for (page, item) in [Page::Home, Page::Nodes, Page::Routing, Page::Settings]
                         .into_iter().zip(CLIENT_NAV.iter()) {
@@ -142,12 +142,12 @@ impl ClientApp {
             });
             return;
         }
-        egui::SidePanel::left("navigation")
-            .exact_width(208.0)
+        egui::Panel::left("navigation")
+            .exact_size(208.0)
             .resizable(false)
             .frame(egui::Frame::new().fill(Color32::from_rgb(236, 240, 248))
                 .inner_margin(egui::Margin::same(18)))
-            .show_inside(root_ui, |ui| {
+            .show(root_ui, |ui| {
                 ui.add_space(10.0);
                 ui.label(RichText::new("◈  v2rayQ").size(25.0).strong().color(ACCENT));
                 ui.label(RichText::new("NETWORK CONTROL").small().color(MUTED));
@@ -187,11 +187,11 @@ impl eframe::App for ClientApp {
         self.side_navigation(ui);
         egui::CentralPanel::default().frame(
             egui::Frame::new().fill(BACKGROUND).inner_margin(egui::Margin::same(28))
-        ).show_inside(ui, |ui| {
+        ).show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 match self.page {
                     Page::Home => self.home(ui),
-                    Page::Nodes => self.nodes(ui, ctx),
+                    Page::Nodes => self.nodes(ui, &ctx),
                     Page::Routing => self.routing(ui),
                     Page::Settings => self.settings(ui),
                 }

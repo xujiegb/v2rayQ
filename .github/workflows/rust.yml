@@ -14,6 +14,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test -p v2rayQ --lib
+      - run: cargo test -p v2rayq-storage
+      - run: cargo check -p v2rayQ --features legacy-tui
       - run: cargo test -p v2rayq-contracts
       - run: cargo test -p v2rayq-http-preview
       - run: cargo check -p v2rayq-server -p v2rayq-web-client
@@ -55,6 +57,8 @@ jobs:
           llvm="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
           test -x "$llvm/aarch64-linux-android24-clang"
           echo "CC_aarch64_linux_android=$llvm/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
+          echo "AR_aarch64_linux_android=$llvm/llvm-ar" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_AR=$llvm/llvm-ar" >> "$GITHUB_ENV"
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$llvm/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
       - run: cargo check -p v2rayq-client --no-default-features --lib --target aarch64-linux-android
   ios-native-ui:
