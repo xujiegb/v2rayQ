@@ -29,9 +29,17 @@ pub enum Access {
 pub enum Command {
     Profile,
     InspectNetwork,
-    SaveNodeGroup { id: Option<Uuid>, name: String },
-    RemoveNodeGroup { id: Uuid },
-    AssignNodeGroup { node_id: Uuid, group_id: Option<Uuid> },
+    SaveNodeGroup {
+        id: Option<Uuid>,
+        name: String,
+    },
+    RemoveNodeGroup {
+        id: Uuid,
+    },
+    AssignNodeGroup {
+        node_id: Uuid,
+        group_id: Option<Uuid>,
+    },
     ExportConfiguration,
     MergeConfiguration {
         content: String,
@@ -326,9 +334,18 @@ impl ClientService {
 
 fn edit_profile(data: &mut ClientData, action: Command) -> Result<&'static str, String> {
     match action {
-        Command::SaveNodeGroup { id, name } => { data.save_group(id, &name)?; Ok("Group saved") },
-        Command::RemoveNodeGroup { id } => { data.remove_group(id)?; Ok("Group removed; nodes kept") },
-        Command::AssignNodeGroup { node_id, group_id } => { data.assign_group(node_id, group_id)?; Ok("Node group updated") },
+        Command::SaveNodeGroup { id, name } => {
+            data.save_group(id, &name)?;
+            Ok("Group saved")
+        }
+        Command::RemoveNodeGroup { id } => {
+            data.remove_group(id)?;
+            Ok("Group removed; nodes kept")
+        }
+        Command::AssignNodeGroup { node_id, group_id } => {
+            data.assign_group(node_id, group_id)?;
+            Ok("Node group updated")
+        }
         Command::AddLink { link } => {
             data.add_share_link(&link)
                 .map_err(|_| "Invalid or unsupported share link")?;
@@ -507,13 +524,19 @@ impl Profile {
             *counts.entry(id).or_insert(0) += 1;
         }
         let mut group_counts = std::collections::HashMap::new();
-        for id in data.memberships.values() { *group_counts.entry(*id).or_insert(0) += 1; }
+        for id in data.memberships.values() {
+            *group_counts.entry(*id).or_insert(0) += 1;
+        }
         Self {
-            groups: data.groups.iter().map(|group| super::GroupSummary {
-                id: group.id,
-                name: group.name.to_owned(),
-                node_count: group_counts.get(&group.id).copied().unwrap_or_default(),
-            }).collect(),
+            groups: data
+                .groups
+                .iter()
+                .map(|group| super::GroupSummary {
+                    id: group.id,
+                    name: group.name.to_owned(),
+                    node_count: group_counts.get(&group.id).copied().unwrap_or_default(),
+                })
+                .collect(),
             nodes: data
                 .nodes
                 .iter()

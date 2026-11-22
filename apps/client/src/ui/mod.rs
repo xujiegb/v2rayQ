@@ -17,9 +17,9 @@ use v2rayq_contracts::CLIENT_NAV;
 
 mod dashboard;
 mod groups;
-mod scan;
 mod pages;
 mod routes;
+mod scan;
 mod settings;
 mod theme;
 mod widgets;
@@ -221,7 +221,9 @@ impl ClientApp {
                         self.profile = data;
                         self.confirm_subscription = None;
                     }
-                    if let Some(info) = reply.ip_info { self.ip_info = Some(info); }
+                    if let Some(info) = reply.ip_info {
+                        self.ip_info = Some(info);
+                    }
                     if let Some(runtime) = reply.runtime {
                         self.runtime = runtime;
                     }
@@ -243,7 +245,10 @@ impl ClientApp {
                         Completion::Rule => self.rule_editor = None,
                         Completion::Merge => self.configuration.clear(),
                         Completion::Network => self.ip_info = None,
-                        Completion::Group => { self.group_edit = None; self.group_name.clear(); },
+                        Completion::Group => {
+                            self.group_edit = None;
+                            self.group_name.clear();
+                        }
                         Completion::Other => {}
                     }
                     if let Some(configuration) = reply.configuration {

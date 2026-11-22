@@ -89,10 +89,16 @@ impl Configuration {
             data.settings.language.clear();
         }
         let mut groups = HashSet::new();
-        if data.groups.len() > 128 { return Err("A profile can contain up to 128 groups".into()); }
+        if data.groups.len() > 128 {
+            return Err("A profile can contain up to 128 groups".into());
+        }
         for group in &data.groups {
-            if group.id.is_nil() || !groups.insert(group.id) || group.name.trim().is_empty()
-                || group.name.len() > 256 || group.name.chars().any(char::is_control) {
+            if group.id.is_nil()
+                || !groups.insert(group.id)
+                || group.name.trim().is_empty()
+                || group.name.len() > 256
+                || group.name.chars().any(char::is_control)
+            {
                 return Err("Invalid node group".into());
             }
         }
@@ -127,7 +133,11 @@ impl Configuration {
         if data.selected_node.is_some_and(|id| !ids.contains(&id)) {
             return Err("Selected node is missing".into());
         }
-        if data.memberships.iter().any(|(node, group)| !ids.contains(node) || !groups.contains(group)) {
+        if data
+            .memberships
+            .iter()
+            .any(|(node, group)| !ids.contains(node) || !groups.contains(group))
+        {
             return Err("Invalid node group reference".into());
         }
         ids.clear();
@@ -219,7 +229,11 @@ impl Configuration {
         let mut group_ids = HashMap::new();
         for group in imported.groups {
             let old_id = group.id;
-            let id = if let Some(saved) = data.groups.iter().find(|saved| saved.name.eq_ignore_ascii_case(&group.name)) {
+            let id = if let Some(saved) = data
+                .groups
+                .iter()
+                .find(|saved| saved.name.eq_ignore_ascii_case(&group.name))
+            {
                 saved.id
             } else {
                 data.save_group(None, &group.name)?;

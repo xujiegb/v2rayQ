@@ -2,9 +2,9 @@
 mod configuration;
 mod groups;
 mod import;
-pub mod network;
 pub mod language;
 mod manual;
+pub mod network;
 pub mod runtime;
 mod service;
 

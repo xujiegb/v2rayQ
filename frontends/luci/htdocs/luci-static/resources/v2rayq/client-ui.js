@@ -204,6 +204,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
         if (state.groupEdit === group.id) { state.groupEdit = null; state.groupName = ""; }
       }))));
     const details = element("details", "vq-group-details");
+    details.open = Boolean(state.groupEdit);
     details.append(element("summary", "", i18n.text("Manage groups")), form, ...rows,
       element("p", "vq-hint", i18n.text("Removing a group keeps its nodes.")));
     wrapper.append(filter, details);

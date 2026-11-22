@@ -106,10 +106,16 @@ fn parse(args: &[&str]) -> Result<Command, String> {
         ["inspect-network"] => json!({ "action": "inspect_network" }),
         ["groups"] => json!({ "action": "profile" }),
         ["add-group", name] => json!({ "action": "save_node_group", "id": null, "name": name }),
-        ["rename-group", id, name] => json!({ "action": "save_node_group", "id": id, "name": name }),
+        ["rename-group", id, name] => {
+            json!({ "action": "save_node_group", "id": id, "name": name })
+        }
         ["delete-group", id] => json!({ "action": "remove_node_group", "id": id }),
-        ["move-node", id] => json!({ "action": "assign_node_group", "node_id": id, "group_id": null }),
-        ["move-node", id, group] => json!({ "action": "assign_node_group", "node_id": id, "group_id": group }),
+        ["move-node", id] => {
+            json!({ "action": "assign_node_group", "node_id": id, "group_id": null })
+        }
+        ["move-node", id, group] => {
+            json!({ "action": "assign_node_group", "node_id": id, "group_id": group })
+        }
         ["nodes" | "subscriptions" | "routes"] => json!({ "action": "profile" }),
         ["import" | "preview-import"] => {
             let action = if args[0] == "import" {
@@ -167,7 +173,13 @@ fn parse(args: &[&str]) -> Result<Command, String> {
 
 fn print_reply(reply: Reply, args: &[&str], tr: language::Translator) {
     if let Some(info) = reply.ip_info {
-        println!("{}  {}  {}  {}", info.ip, terminal_text(&info.country), terminal_text(&info.city), terminal_text(&info.isp));
+        println!(
+            "{}  {}  {}  {}",
+            info.ip,
+            terminal_text(&info.country),
+            terminal_text(&info.city),
+            terminal_text(&info.isp)
+        );
     }
     if let Some(config) = reply.configuration {
         println!("{config}");
@@ -194,7 +206,14 @@ fn print_reply(reply: Reply, args: &[&str], tr: language::Translator) {
     }
     if let Some(profile) = reply.profile {
         if args == ["groups"] {
-            for group in &profile.groups { println!("{}  {}  {}", group.id, terminal_text(&group.name), group.node_count); }
+            for group in &profile.groups {
+                println!(
+                    "{}  {}  {}",
+                    group.id,
+                    terminal_text(&group.name),
+                    group.node_count
+                );
+            }
         } else if args == ["nodes"] {
             for node in profile.nodes {
                 let selected = if profile.selected_node == Some(node.id) {

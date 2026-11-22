@@ -120,10 +120,11 @@ impl ClientApp {
                 let needle = self.query.trim().to_lowercase();
                 let group_filter = &self.group_filter;
                 let matches = |node: &&v2rayQ::client::NodeSummary| {
-                    groups::matches_filter(group_filter, node) && (needle.is_empty()
-                        || node.name.to_lowercase().contains(&needle)
-                        || node.host.to_lowercase().contains(&needle)
-                        || node.protocol.label().to_lowercase().contains(&needle))
+                    groups::matches_filter(group_filter, node)
+                        && (needle.is_empty()
+                            || node.name.to_lowercase().contains(&needle)
+                            || node.host.to_lowercase().contains(&needle)
+                            || node.protocol.label().to_lowercase().contains(&needle))
                 };
                 let filtered = self.profile.nodes.iter().filter(matches);
                 let count = self.profile.nodes.iter().filter(matches).count();
@@ -154,12 +155,25 @@ impl ClientApp {
                         );
                         let mut group_id = node.group_id;
                         egui::ComboBox::from_id_salt(("node_group", node.id))
-                            .selected_text(self.profile.groups.iter().find(|group| Some(group.id) == group_id).map_or(tr.text("Default group"), |group| group.name.as_str()))
+                            .selected_text(
+                                self.profile
+                                    .groups
+                                    .iter()
+                                    .find(|group| Some(group.id) == group_id)
+                                    .map_or(tr.text("Default group"), |group| group.name.as_str()),
+                            )
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(&mut group_id, None, tr.text("Default group"));
-                                for group in &self.profile.groups { ui.selectable_value(&mut group_id, Some(group.id), &group.name); }
+                                for group in &self.profile.groups {
+                                    ui.selectable_value(&mut group_id, Some(group.id), &group.name);
+                                }
                             });
-                        if group_id != node.group_id { action = Some(Command::AssignNodeGroup { node_id: node.id, group_id }); }
+                        if group_id != node.group_id {
+                            action = Some(Command::AssignNodeGroup {
+                                node_id: node.id,
+                                group_id,
+                            });
+                        }
                         if node.subscription_id.is_some() {
                             if ui.small_button(tr.text("Make local copy")).clicked() {
                                 action = Some(Command::CopyNode { id: node.id });

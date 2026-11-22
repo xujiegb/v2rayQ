@@ -1,7 +1,7 @@
 //! User-defined collections. Subscription ownership remains independent.
+use super::ClientData;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use super::ClientData;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct NodeGroup {
@@ -22,23 +22,38 @@ impl ClientData {
         if name.is_empty() || name.len() > 256 || name.chars().any(char::is_control) {
             return Err("Enter a group name of up to 256 bytes".into());
         }
-        if self.groups.iter().any(|group| Some(group.id) != id && group.name.eq_ignore_ascii_case(name)) {
+        if self
+            .groups
+            .iter()
+            .any(|group| Some(group.id) != id && group.name.eq_ignore_ascii_case(name))
+        {
             return Err("A group with this name already exists".into());
         }
         if let Some(id) = id {
-            let group = self.groups.iter_mut().find(|group| group.id == id).ok_or("Group not found")?;
+            let group = self
+                .groups
+                .iter_mut()
+                .find(|group| group.id == id)
+                .ok_or("Group not found")?;
             group.name = name.to_owned();
         } else {
             if self.groups.len() >= 128 {
                 return Err("A profile can contain up to 128 groups".into());
             }
-            self.groups.push(NodeGroup { id: Uuid::new_v4(), name: name.to_owned() });
+            self.groups.push(NodeGroup {
+                id: Uuid::new_v4(),
+                name: name.to_owned(),
+            });
         }
         Ok(())
     }
 
     pub fn remove_group(&mut self, id: Uuid) -> Result<(), String> {
-        let index = self.groups.iter().position(|group| group.id == id).ok_or("Group not found")?;
+        let index = self
+            .groups
+            .iter()
+            .position(|group| group.id == id)
+            .ok_or("Group not found")?;
         self.groups.remove(index);
         self.memberships.retain(|_, group| *group != id);
         Ok(())
@@ -60,7 +75,8 @@ impl ClientData {
     }
 
     pub(super) fn prune_memberships(&mut self) {
-        let ids: std::collections::HashSet<_> = self.nodes.iter().map(|entry| entry.node.id).collect();
+        let ids: std::collections::HashSet<_> =
+            self.nodes.iter().map(|entry| entry.node.id).collect();
         self.memberships.retain(|node, _| ids.contains(node));
     }
 }

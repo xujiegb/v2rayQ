@@ -1,6 +1,10 @@
 //! An explicit host public-IP lookup; no background calls or Core assumptions.
-use std::{io::Read, net::IpAddr, time::{Duration, SystemTime, UNIX_EPOCH}};
 use serde::{Deserialize, Serialize};
+use std::{
+    io::Read,
+    net::IpAddr,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 #[derive(Deserialize, Serialize)]
 pub struct IpInfo {
@@ -24,24 +28,35 @@ pub fn inspect() -> Result<IpInfo, String> {
         .max_redirects(0)
         .build();
     let agent: ureq::Agent = config.into();
-    let mut response = agent.get("https://api.ip.sb/geoip")
+    let mut response = agent
+        .get("https://api.ip.sb/geoip")
         .header("User-Agent", "v2rayQ/0.1")
-        .call().map_err(|_| "Could not look up the host public IP")?;
+        .call()
+        .map_err(|_| "Could not look up the host public IP")?;
     let mut bytes = Vec::new();
-    response.body_mut().as_reader().take(65537).read_to_end(&mut bytes)
+    response
+        .body_mut()
+        .as_reader()
+        .take(65537)
+        .read_to_end(&mut bytes)
         .map_err(|_| "Could not read IP information")?;
-    if bytes.len() > 65536 { return Err("Invalid IP information response".into()); }
+    if bytes.len() > 65536 {
+        return Err("Invalid IP information response".into());
+    }
     parse(&bytes)
 }
 
 fn parse(bytes: &[u8]) -> Result<IpInfo, String> {
-    let mut info: IpInfo = serde_json::from_slice(bytes).map_err(|_| "Invalid IP information response")?;
+    let mut info: IpInfo =
+        serde_json::from_slice(bytes).map_err(|_| "Invalid IP information response")?;
     for text in [&info.country, &info.region, &info.city, &info.isp] {
         if text.len() > 256 || text.chars().any(char::is_control) {
             return Err("Invalid IP information response".into());
         }
     }
-    info.checked_at = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |time| time.as_secs());
+    info.checked_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |time| time.as_secs());
     Ok(info)
 }
 
