@@ -1,48 +1,54 @@
 # v2rayQ
 
-Modular Rust 2024 client/server application, following the shared-service / independent-presentation principle also used by v2rayN. **Native egui clients never embed WebView or browser HTML.**
+Modular Rust 2024 client/server foundation. **egui is a native UI using real Rust widgets, never an embedded browser or WebView.** The client and server are separate processes and deployment artifacts.
 
-## Delivery modules
+## Build targets and reuse
 
-| Artifact | Source | Targets |
+| Artifact | Implementation | Target systems |
 |---|---|---|
-| Native egui client | `apps/client` | Windows, Linux, macOS; Android/iOS/FreeBSD target validation in CI |
-| Independent Web client | `apps/web-client` + `frontends/web/client.html` | Windows, Linux, macOS, FreeBSD |
-| Independent Rust server | `apps/server` + `frontends/web/server.html` | Windows, Linux, macOS, FreeBSD |
-| Cockpit client plugin | `frontends/cockpit` | Linux with Cockpit |
-| LuCI client plugin | `frontends/luci` | OpenWrt, or Linux with LuCI |
-| Shared contracts | `crates/contracts` | Platform-independent, std-only |
-| Shared HTTP preview | `crates/http-preview` | Platform-independent, std-only |
-| Shared node/URI models | `src/model`, `src/parser` | Pure Rust client service |
-| Client profile store | `src/client` | Rust, JSON, no Core dependency |
-| Legacy CLI/Turso | `src/cli`, `src/db` | Explicit `legacy-tui` / `database` features only |
+| Native client | `apps/client`, egui/eframe + shared services | Windows, macOS, Linux; FreeBSD build validation; Android/iOS library-only checks |
+| Web client | `apps/web-client`, std HTTP host + light HTML/CSS/JS | Windows, macOS, Linux, FreeBSD |
+| Server | `apps/server`, independent std HTTP host | Windows, macOS, Linux, FreeBSD |
+| Cockpit client plugin | `frontends/cockpit`, shared Web assets | Linux Cockpit |
+| LuCI client plugin | `frontends/luci`, small native LuCI view | OpenWrt or Linux with LuCI |
+| Shared API model | `crates/contracts` | std-only, platform independent |
+| HTTP asset delivery | `crates/http-preview` | std-only read-only preview; injected HTML per app |
+| Embedded database | `crates/storage`, **redb 5.0.0** | Rust client persistence; usable independently by future server services |
+| Node model and parsers | `src/model`, `src/parser` | Shared Rust client domain |
+| Offline client service | `src/client` | Imports, subscriptions, manual nodes and settings |
+| Legacy terminal UI | `src/cli` | Optional `legacy-tui` feature, no SQL runtime |
 
-## Native UI versus browser UI
+The two HTTP applications inject only their own HTML page into a shared *transport* crate. Native egui does not include HTML/CSS/JS or WebView components, and the server binary does not depend on egui, wgpu or a browser engine.
 
-`apps/client/src/ui` contains Rust egui widgets and page controllers. The Android, iOS, Windows, Linux, macOS, and FreeBSD clients are intended to use **this single Rust UI**, not the HTML/CSS/JS from the browser panels. Browser clients are separate artifacts and share visual assets and versioned application contracts.
+## Database replacement
 
-`apps/client/src/lib.rs` exports a safe `ClientApp` and a `run_with_native_options` function for platform launchers. The CLI executable builds only with the `desktop` feature. Android and iOS native library targets are checked in CI; **APK/IPA packaging and host activity/Swift entry points are not implemented yet**. Official Android NativeActivity entry requires a Rust 2024 `#[unsafe(no_mangle)]` symbol, which conflicts with the repository's strict no-unsafe-source rule. This needs an explicitly audited platform bootstrap decision before an APK can be claimed. iOS likewise requires a native Xcode host. No WebView fallback will be used.
+**Turso and Tokio's SQL runtime have been removed.** Persistent client state is stored as one versioned redb document using ACID transactions. Future record-based storage can use namespaced keys in the shared `v2rayq-storage` crate; it has get/put/delete/prefix-list operations.
 
-## Build
+On first run the client uses `client.redb` in the platform application-data/config directory. If `client.redb` is absent but the previous `client.json` is present, the JSON file is imported once into redb and **retained as a backup**. If the JSON is invalid, loading fails rather than deleting or overwriting it. On Unix, database file permissions are restricted to the current user. redb does not encrypt secrets at rest; use OS storage protection for devices that require it.
 
-Use a current stable Rust toolchain.
+**Existing legacy `v2rayQ.db` Turso/SQLite data is not automatically imported.** Do not delete it. Any migration from those table layouts must be a separate, tested export/import step before replacing user data.
+
+## Build and test
+
+Use current stable Rust with appropriate target SDKs:
 
 ```sh
-cargo test -p v2rayQ --lib
+cargo test -p v2rayq-storage -p v2rayQ --lib
 cargo test -p v2rayq-contracts -p v2rayq-http-preview
+cargo check -p v2rayq-client -p v2rayq-web-client -p v2rayq-server
 cargo run -p v2rayq-client
 cargo run -p v2rayq-web-client  # http://127.0.0.1:16838/
 cargo run -p v2rayq-server      # http://127.0.0.1:16837/
 ```
 
-Web client and server are completely different binaries and ports. Both are bound to localhost until an authenticated management API is available. Cockpit packages only the client. LuCI has a tiny native JS client and no WebAssembly/egui code.
+Cockpit: `sh frontends/cockpit/install.sh` from the repository root, with permission to write `/usr/share/cockpit/v2rayq`. LuCI: the `frontends/luci/Makefile` generates an OpenWrt LuCI package using only its native JS and CSS assets.
 
-The previous `turso_core 0.8.4` compile failure is isolated behind optional features and no longer blocks the default native client or server dependency graph. The old database code remains for migration, but its optional build is not claimed to pass until upstream fixes are available.
+CI includes Windows/Linux/macOS native check, FreeBSD 15.1 VM check, Android arm64 and iOS arm64 Rust-library checks. Native APK/IPA host wrappers, signing and real device validation are **not complete** (see `packaging/mobile/README.md`). Android's exported entry point cannot be provided in first-party Rust while strictly forbidding unsafe attributes; a separately audited launcher is required. No WebView workaround will be used.
 
-## Functionality and limitations
+## What works and what is a preview
 
-Implemented: native share URI import and manual node addition/deletion (VLESS, VMess, Trojan, Shadowsocks, AnyTLS, Hysteria2), HTTPS subscription refresh, plain/base64 URI-list parsing, offline state persistence, routing and network-mode preferences.
+Native egui: manual node management and deletion, VLESS/VMess/Trojan/Shadowsocks/AnyTLS/Hysteria2 share import, HTTPS subscription refresh, local data persistence and settings UI.
 
-**Not connected:** The external Rust Core has not published its API/config format. TUN, transparent/system proxy, routing execution, traffic charts, server-side management, administrator accounts, Web client, Cockpit and LuCI write operations are not functional. Never present offline switches as active connections. Native client settings are not executed on the host.
+**Not yet connected:** the third-party Rust Core API and config format are not public. TUN, transparent/system proxy, traffic measurements, actual routing and server CRUD are unavailable. Preference switches do not imply live tunnel status. Web, Cockpit and LuCI panels currently provide their unified layout but **not** a writable proxy-control API. Both local Web hosts bind only to localhost, with no public administration or authentication enabled.
 
-This PR builds a reviewable cross-platform foundation, not signed/runnable packages for every target. FreeBSD native egui support, Android/iOS host packaging and real Core features require target-specific checks, system integration and follow-up work.
+A real privileged network helper will need OS-mediated authorization, narrowly scoped commands and platform review; it must not collect sudo credentials inside a custom text field.

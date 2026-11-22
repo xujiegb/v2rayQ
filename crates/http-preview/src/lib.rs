@@ -1,43 +1,33 @@
 #![forbid(unsafe_code)]
 
-// Small std-only HTTP frontend for local UI previews. Not a production API.
-// Authenticated Core RPC must live in its own service module, never here.
+//! Read-only localhost panel host. It never starts or controls the proxy Core.
+//! The client and server applications supply their own HTML to avoid bundling
+//! the opposite application's interface into either executable.
 use std::{
     io::{self, Read, Write},
     net::{Ipv4Addr, TcpListener, TcpStream},
     time::Duration,
 };
 
-use v2rayq_contracts::{CoreBackend, UnavailableCore, API_VERSION};
+use v2rayq_contracts::{API_VERSION, CoreBackend, UnavailableCore};
 
-const SERVER: &str = include_str!("../../../frontends/web/server.html");
-const CLIENT: &str = include_str!("../../../frontends/web/client.html");
 const CSS: &str = include_str!("../../../frontends/shared/panel.css");
 const SCRIPT: &str = include_str!("../../../frontends/shared/panel.js");
 
-#[derive(Debug, Clone, Copy)]
-pub enum Mode {
-    Client,
-    Server,
+#[derive(Clone, Copy)]
+pub struct Panel {
+    pub title: &'static str,
+    pub html: &'static str,
 }
 
-impl Mode {
-    pub fn title(self) -> &'static str {
-        match self {
-            Self::Client => "Client",
-            Self::Server => "Server",
-        }
-    }
-}
-
-pub fn serve(mode: Mode, port: u16) -> io::Result<()> {
+pub fn serve(panel: Panel, port: u16) -> io::Result<()> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, port))?;
-    println!("v2rayQ {} UI: http://127.0.0.1:{port}/", mode.title());
+    println!("v2rayQ {} UI: http://127.0.0.1:{port}/", panel.title);
     for connection in listener.incoming() {
         match connection {
             Ok(stream) => {
                 std::thread::spawn(move || {
-                    if let Err(error) = serve_connection(stream, mode) {
+                    if let Err(error) = serve_connection(stream, panel) {
                         eprintln!("preview request: {error}");
                     }
                 });
@@ -48,7 +38,7 @@ pub fn serve(mode: Mode, port: u16) -> io::Result<()> {
     Ok(())
 }
 
-fn serve_connection(mut stream: TcpStream, mode: Mode) -> io::Result<()> {
+fn serve_connection(mut stream: TcpStream, panel: Panel) -> io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;
     let mut request = [0u8; 4096];
@@ -56,16 +46,14 @@ fn serve_connection(mut stream: TcpStream, mode: Mode) -> io::Result<()> {
     let request_line = String::from_utf8_lossy(&request[..size]);
     let mut parts = request_line.lines().next().unwrap_or("").split_whitespace();
     let method = parts.next().unwrap_or("");
-    let path = parts.next().unwrap_or("");
+    let path = parts.next().unwrap_or("").split('?').next().unwrap_or("");
     let head_only = method == "HEAD";
     if method != "GET" && !head_only {
         return respond(&mut stream, false, "405 Method Not Allowed", "text/plain", "Method not allowed");
     }
     let core = UnavailableCore;
     let (status, mime, body) = match path {
-        "/" | "/index.html" => ("200 OK", "text/html; charset=utf-8", match mode {
-            Mode::Client => CLIENT.to_owned(), Mode::Server => SERVER.to_owned(),
-        }),
+        "/" | "/index.html" => ("200 OK", "text/html; charset=utf-8", panel.html.to_owned()),
         "/assets/panel.css" => ("200 OK", "text/css; charset=utf-8", CSS.to_owned()),
         "/assets/panel.js" => ("200 OK", "text/javascript; charset=utf-8", SCRIPT.to_owned()),
         "/api/v1/status" => {
@@ -102,11 +90,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn client_server_binaries_share_html_assets() {
-        assert!(CLIENT.contains("panel.css"));
-        assert!(SERVER.contains("panel.css"));
-        assert!(CLIENT.contains("data-panel=\"client\""));
-        assert!(SERVER.contains("data-panel=\"server\""));
+    fn panel_content_is_injected_by_the_app() {
+        let panel = Panel { title: "Test", html: "<h1>Test</h1>" };
+        assert_eq!(panel.title, "Test");
+        assert!(panel.html.contains("Test"));
         assert!(!SCRIPT.contains("eval("));
     }
 }
