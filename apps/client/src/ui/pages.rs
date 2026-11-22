@@ -5,11 +5,17 @@ impl ClientApp {
         ui.heading(RichText::new("Overview").size(29.0).color(INK));
         ui.label(RichText::new("Your connection at a glance").color(MUTED));
         ui.add_space(20.0);
-        ui.columns(3, |columns| {
-            metric(&mut columns[0], "ENGINE", "Not connected", "Waiting for Core");
-            metric(&mut columns[1], "NODES", &self.data.nodes.len().to_string(), "Saved locally");
-            metric(&mut columns[2], "SUBSCRIPTIONS", &self.data.subscriptions.len().to_string(), "HTTPS imports");
-        });
+        if ui.available_width() < 650.0 {
+            metric(ui, "ENGINE", "Not connected", "Waiting for Core");
+            metric(ui, "NODES", &self.data.nodes.len().to_string(), "Saved locally");
+            metric(ui, "SUBSCRIPTIONS", &self.data.subscriptions.len().to_string(), "HTTPS imports");
+        } else {
+            ui.columns(3, |columns| {
+                metric(&mut columns[0], "ENGINE", "Not connected", "Waiting for Core");
+                metric(&mut columns[1], "NODES", &self.data.nodes.len().to_string(), "Saved locally");
+                metric(&mut columns[2], "SUBSCRIPTIONS", &self.data.subscriptions.len().to_string(), "HTTPS imports");
+            });
+        }
         ui.add_space(23.0);
         section(ui, "Connection");
         ui.group(|ui| {
@@ -24,7 +30,7 @@ impl ClientApp {
     }
 
     pub(super) fn nodes(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.heading(RichText::new("Nodes").size(29.0).color(INK));
             ui.add_space(18.0);
             if ui.button("＋ Share link").clicked() { self.add_link = !self.add_link; self.add_manual = false; }
@@ -47,7 +53,7 @@ impl ClientApp {
         }
         if self.add_manual {
             ui.group(|ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("Protocol");
                     egui::ComboBox::from_id_salt("protocol")
                         .selected_text(["VLESS", "VMess", "Trojan", "Shadowsocks", "AnyTLS", "Hysteria2"][self.manual.protocol])
@@ -60,10 +66,10 @@ impl ClientApp {
                 form_row(ui, "Name", &mut self.manual.name);
                 form_row(ui, "Server", &mut self.manual.host);
                 form_row(ui, "Port", &mut self.manual.port);
-                ui.horizontal(|ui| {
-                    ui.add_sized([175.0, 22.0], egui::Label::new("UUID / password"));
-                    ui.add_sized([340.0, 25.0], egui::TextEdit::singleline(&mut self.manual.credential).password(true));
-                });
+                ui.label("UUID / password");
+                ui.add(egui::TextEdit::singleline(&mut self.manual.credential)
+                    .password(true)
+                    .desired_width(ui.available_width().min(500.0)));
                 if self.manual.protocol == 3 {
                     form_row(ui, "Cipher", &mut self.manual.method);
                 }
@@ -95,7 +101,7 @@ impl ClientApp {
         egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
             if self.data.nodes.is_empty() { ui.label("No nodes yet. Import a link or add one manually."); }
             for entry in &self.data.nodes {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     let picked = self.data.selected_node == Some(entry.node.id);
                     if ui.selectable_label(picked, format!("{}   ·   {}", entry.node.name, protocol_name(&entry.node.protocol))).clicked() {
                         select = Some(entry.node.id);
@@ -109,7 +115,7 @@ impl ClientApp {
         if let Some(id) = select { self.data.selected_node = Some(id); self.save(); }
         if let Some(id) = remove { self.data.remove_node(id); self.save(); }
         ui.add_space(15.0);
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             section(ui, "Subscriptions");
             if ui.button("＋ Add subscription").clicked() {
                 self.add_subscription = !self.add_subscription;
@@ -136,7 +142,7 @@ impl ClientApp {
         let mut refresh = None;
         let mut remove_sub = None;
         for subscription in &self.data.subscriptions {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(&subscription.name).strong().color(INK));
                 ui.label(RichText::new(
                     subscription.last_error.as_deref().unwrap_or("Ready"))
@@ -155,7 +161,7 @@ impl ClientApp {
         ui.add_space(18.0);
         section(ui, "Outbound policy");
         let mut changed = false;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             changed |= ui.selectable_value(&mut self.data.settings.route_mode, RouteMode::Direct, "Direct").changed();
             changed |= ui.selectable_value(&mut self.data.settings.route_mode, RouteMode::Global, "Global").changed();
             changed |= ui.selectable_value(&mut self.data.settings.route_mode, RouteMode::Rules, "Rule-based").changed();

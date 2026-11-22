@@ -47,6 +47,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
+      - name: Configure Android NDK Clang
+        shell: bash
+        run: |
+          ndk="$(find "${ANDROID_SDK_ROOT}/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -n "$ndk"
+          llvm="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          test -x "$llvm/aarch64-linux-android24-clang"
+          echo "CC_aarch64_linux_android=$llvm/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$llvm/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
       - run: cargo check -p v2rayq-client --no-default-features --lib --target aarch64-linux-android
   ios-native-ui:
     name: iOS arm64 egui Rust library

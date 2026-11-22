@@ -175,7 +175,7 @@ pub fn parse_subscription(input: &str) -> Result<Vec<Node>, String> {
         // Subscription providers sometimes wrap base64 payloads at fixed columns.
         let encoded: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
         for engine in [STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD] {
-            if let Ok(bytes) = engine.decode(encoded)
+            if let Ok(bytes) = engine.decode(&encoded)
                 && bytes.len() <= MAX_SUBSCRIPTION_BYTES
                 && let Ok(decoded) = String::from_utf8(bytes)
             {

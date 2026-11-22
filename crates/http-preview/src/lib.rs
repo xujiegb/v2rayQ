@@ -66,7 +66,6 @@ fn serve_connection(mut stream: TcpStream, mode: Mode) -> io::Result<()> {
         "/" | "/index.html" => ("200 OK", "text/html; charset=utf-8", match mode {
             Mode::Client => CLIENT.to_owned(), Mode::Server => SERVER.to_owned(),
         }),
-        "/client" if matches!(mode, Mode::Server) => ("200 OK", "text/html; charset=utf-8", CLIENT.to_owned()),
         "/assets/panel.css" => ("200 OK", "text/css; charset=utf-8", CSS.to_owned()),
         "/assets/panel.js" => ("200 OK", "text/javascript; charset=utf-8", SCRIPT.to_owned()),
         "/api/v1/status" => {

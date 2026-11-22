@@ -62,9 +62,12 @@ pub struct ClientApp {
 
 impl ClientApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        Self::new_with_data_path(cc, default_data_path())
+    }
+
+    pub fn new_with_data_path(cc: &eframe::CreationContext<'_>, path: PathBuf) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::light());
         install_font_fallback(&cc.egui_ctx);
-        let path = default_data_path();
         let (data, notice) = match ClientData::load(&path) {
             Ok(data) => (data, String::new()),
             Err(error) => (ClientData::default(), format!("Could not load saved settings: {error}")),

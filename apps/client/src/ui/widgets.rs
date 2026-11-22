@@ -15,10 +15,15 @@ pub(super) fn metric(ui: &mut egui::Ui, title: &str, value: &str, description: &
 }
 
 pub(super) fn form_row(ui: &mut egui::Ui, label: &str, value: &mut String) {
-    ui.horizontal(|ui| {
-        ui.add_sized([175.0, 22.0], egui::Label::new(label));
-        ui.add_sized([340.0, 25.0], egui::TextEdit::singleline(value));
-    });
+    if ui.available_width() < 580.0 {
+        ui.label(label);
+        ui.add(egui::TextEdit::singleline(value).desired_width(ui.available_width().min(500.0)));
+    } else {
+        ui.horizontal(|ui| {
+            ui.add_sized([175.0, 22.0], egui::Label::new(label));
+            ui.add_sized([340.0, 25.0], egui::TextEdit::singleline(value));
+        });
+    }
 }
 
 pub(super) fn protocol_name(value: &Protocol) -> &'static str {
