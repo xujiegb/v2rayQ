@@ -1,0 +1,29 @@
+name: Rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  core:
+    name: Library and server checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test -p v2rayQ --lib
+      - run: cargo check -p v2rayq-server
+      - name: Forbid unsafe in new Rust modules
+        run: |
+          if grep -R 'unsafe {' apps/client/src apps/server/src src/client; then exit 1; fi
+          if grep -R 'transmute(' apps/client/src apps/server/src src/client; then exit 1; fi
+  desktop:
+    name: egui desktop check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux UI libraries
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      - run: cargo check -p v2rayq-client

@@ -1,0 +1,11 @@
+[package]
+name = "v2rayq-client"
+version = "0.1.0"
+edition = "2024"
+license = "BSD-3-Clause"
+
+[dependencies]
+v2rayQ = { path = "../.." }
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "default_fonts", "x11", "wayland"] }
+ureq = "3.5.2"
+uuid = { version = "1", features = ["v4"] }

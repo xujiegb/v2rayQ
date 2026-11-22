@@ -1,0 +1,8 @@
+[package]
+name = "v2rayq-server"
+version = "0.1.0"
+edition = "2024"
+license = "BSD-3-Clause"
+
+# Intentionally std-only until the real Core protocol becomes public.
+[dependencies]

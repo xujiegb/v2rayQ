@@ -1,0 +1,7 @@
+{
+  "version": 0,
+  "tools": {
+    "v2rayq-client": {"label": "v2rayQ Client", "path": "client.html"},
+    "v2rayq-server": {"label": "v2rayQ Server", "path": "server.html"}
+  }
+}
