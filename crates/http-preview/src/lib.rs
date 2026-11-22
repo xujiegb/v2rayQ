@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub const COMMAND_LIMIT: usize = 128 * 1024;
+pub const COMMAND_LIMIT: usize = 8 * 1024 * 1024;
 const HEADER_LIMIT: usize = 8192;
 const MAX_CONNECTIONS: usize = 12;
 
@@ -27,6 +27,8 @@ pub struct Panel {
     pub title: &'static str,
     pub html: &'static str,
     pub assets: &'static [Asset],
+    pub locales: &'static [(&'static str, &'static str)],
+    pub locale_manifest: &'static str,
 }
 
 pub fn serve(
@@ -175,6 +177,28 @@ fn handle(
             "200 OK",
             "text/html; charset=utf-8",
             panel.html,
+        );
+    }
+    if path == "/assets/locales/index.json" {
+        return respond(
+            &mut stream,
+            head,
+            "200 OK",
+            "application/json; charset=utf-8",
+            panel.locale_manifest,
+        );
+    }
+    if let Some(code) = path
+        .strip_prefix("/assets/locales/")
+        .and_then(|value| value.strip_suffix(".json"))
+        && let Some((_, content)) = panel.locales.iter().find(|(id, _)| *id == code)
+    {
+        return respond(
+            &mut stream,
+            head,
+            "200 OK",
+            "application/json; charset=utf-8",
+            content,
         );
     }
     if let Some(asset) = panel.assets.iter().find(|asset| asset.path == path) {

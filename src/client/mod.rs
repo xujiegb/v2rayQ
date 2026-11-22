@@ -1,9 +1,15 @@
 //! Client profile storage and operations shared by every frontend.
+mod configuration;
+mod groups;
 mod import;
+pub mod language;
 mod manual;
+pub mod network;
 pub mod runtime;
 mod service;
 
+pub use configuration::MergeSummary;
+pub use groups::{GroupSummary, NodeGroup};
 pub use manual::{ManualNode, ManualTransport, ProtocolKind};
 pub use service::{Access, ClientService, Command, NodeSummary, Profile, Reply};
 use std::{
@@ -32,6 +38,8 @@ pub struct SavedNode {
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ClientData {
+    pub groups: Vec<NodeGroup>,
+    pub memberships: std::collections::BTreeMap<Uuid, Uuid>,
     pub nodes: Vec<SavedNode>,
     pub subscriptions: Vec<Subscription>,
     pub selected_node: Option<Uuid>,
@@ -84,6 +92,7 @@ impl ClientData {
 
     pub fn remove_node(&mut self, id: Uuid) {
         self.nodes.retain(|entry| entry.node.id != id);
+        self.memberships.remove(&id);
         if self.selected_node == Some(id) {
             self.selected_node = self.nodes.first().map(|entry| entry.node.id);
         }
@@ -148,6 +157,7 @@ impl ClientData {
     pub fn remove_subscription(&mut self, id: Uuid) {
         self.subscriptions.retain(|entry| entry.id != id);
         self.nodes.retain(|entry| entry.subscription_id != Some(id));
+        self.prune_memberships();
         if self
             .selected_node
             .is_some_and(|selected| !self.nodes.iter().any(|entry| entry.node.id == selected))
@@ -187,6 +197,7 @@ impl ClientData {
             node,
             subscription_id: Some(id),
         }));
+        self.prune_memberships();
         if let Some(subscription) = self.subscriptions.iter_mut().find(|entry| entry.id == id) {
             subscription.last_updated_at = SystemTime::now()
                 .duration_since(UNIX_EPOCH)

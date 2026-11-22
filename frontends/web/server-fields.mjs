@@ -1,10 +1,12 @@
 // These fields belong to panel drafts. The Core adapter defines its own schema.
 export const fields = {
   inbounds: [
-    ["tag", "Name"], ["type", "Protocol"], ["listen", "Listen address"], ["listen_port", "Listen port", "port"]
+    ["tag", "Name"], ["type", "Protocol", "protocol"], ["listen", "Listen address"], ["listen_port", "Listen port", "port"],
+    ["security", "Security", "security"], ["security_profile", "Security profile name", "profile", ["security", ["tls", "reality"]]]
   ],
-  users: [["name", "Name"], ["enabled", "Enabled", "boolean"]],
-  outbounds: [["tag", "Name"], ["type", "Protocol"], ["server", "Server"], ["server_port", "Server port", "port"]],
+  users: [["name", "Name"], ["enabled", "Enabled", "boolean"], ["inbound", "Inbound name"], ["credential", "Credential", "secret"]],
+  outbounds: [["tag", "Name"], ["type", "Protocol", "protocol"], ["server", "Server"], ["server_port", "Server port", "port"], ["node", "Node name"],
+    ["security", "Security", "security"], ["security_profile", "Security profile name", "profile", ["security", ["tls", "reality"]]]],
   nodes: [
     ["name", "Name"], ["protocol", "Protocol", "protocol"], ["server", "Server"], ["server_port", "Server port", "port"],
     ["uuid", "UUID", "text", ["protocol", ["vless", "vmess"]]],

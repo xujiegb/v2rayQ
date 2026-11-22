@@ -4,6 +4,7 @@ use base64::{
     Engine as _,
     engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD},
 };
+use uuid::Uuid;
 
 use super::{ClientData, MAX_NODES, MAX_SUBSCRIPTION_BYTES};
 use crate::{
@@ -90,7 +91,15 @@ impl Import {
         count - self.nodes.len()
     }
 
-    pub fn apply(mut self, data: &mut ClientData, preview: bool) -> String {
+    pub fn apply(
+        mut self,
+        data: &mut ClientData,
+        preview: bool,
+        group_id: Option<Uuid>,
+    ) -> Result<String, String> {
+        if group_id.is_some_and(|id| !data.groups.iter().any(|group| group.id == id)) {
+            return Err("Group not found".into());
+        }
         let duplicates = self.deduplicate(
             data.nodes
                 .iter()
@@ -103,6 +112,9 @@ impl Import {
                 .selected_node
                 .or_else(|| self.nodes.first().map(|node| node.id));
             for node in self.nodes {
+                if let Some(group) = group_id {
+                    data.memberships.insert(node.id, group);
+                }
                 data.add_node(node);
             }
             data.selected_node = selection;
@@ -118,9 +130,9 @@ impl Import {
         } else {
             "duplicates"
         };
-        format!(
+        Ok(format!(
             "{label} {count} {nodes} · {duplicates} {duplicate_label} · {} skipped",
             self.skipped
-        )
+        ))
     }
 }

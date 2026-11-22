@@ -8,15 +8,19 @@ use uuid::Uuid;
 use v2rayQ::{
     client::{
         Access, ClientService, Command, ManualNode, ManualTransport, Profile, ProtocolKind, Reply,
-        default_data_path,
+        default_data_path, language,
         runtime::{NetworkMode, Runtime, ServiceStatus},
     },
     model::{RouteMode, RuleDirection, RuleFields, RuleMatch, RuleTarget},
 };
 use v2rayq_contracts::CLIENT_NAV;
 
+mod dashboard;
+mod groups;
 mod pages;
 mod routes;
+mod scan;
+mod settings;
 mod theme;
 mod widgets;
 use widgets::{card, form_row, heading, service_label};
@@ -41,12 +45,17 @@ enum NodeForm {
     Share,
     Manual,
     Subscription,
+    Scan,
 }
 
+#[derive(Clone, Copy)]
 enum Completion {
     NodeForm(NodeForm),
     Endpoint,
     Rule,
+    Merge,
+    Group,
+    Network,
     Other,
 }
 
@@ -67,6 +76,17 @@ pub struct ClientApp {
     page: Page,
     profile: Profile,
     runtime: Runtime,
+    ip_info: Option<v2rayQ::client::network::IpInfo>,
+    proxy_mode: NetworkMode,
+    group_filter: String,
+    group_edit: Option<Uuid>,
+    group_name: String,
+    scan_path: String,
+    scan_job: Option<Receiver<Result<scan::ScanResult, String>>>,
+    translator: v2rayq_i18n::Translator,
+    configuration: String,
+    configuration_path: String,
+    use_preferences: bool,
     data_path: PathBuf,
     form: NodeForm,
     share_link: String,
@@ -109,8 +129,11 @@ impl ClientApp {
                     Command::AddSubscription { .. } | Command::UpdateSubscription { .. } => {
                         Completion::NodeForm(NodeForm::Subscription)
                     }
+                    Command::SetNetwork { .. } => Completion::Network,
+                    Command::SaveNodeGroup { .. } => Completion::Group,
                     Command::UpdateNode { .. } => Completion::Endpoint,
                     Command::SaveRouteRule { .. } => Completion::Rule,
+                    Command::MergeConfiguration { preview: false, .. } => Completion::Merge,
                     _ => Completion::Other,
                 };
                 if responses
@@ -126,6 +149,20 @@ impl ClientApp {
             page: Page::Home,
             profile: Profile::default(),
             runtime: Runtime::default(),
+            ip_info: None,
+            proxy_mode: NetworkMode::Tun,
+            group_filter: String::new(),
+            group_edit: None,
+            group_name: String::new(),
+            scan_path: String::new(),
+            scan_job: None,
+            translator: language::RESOURCES.translator(&v2rayq_i18n::system_language()),
+            configuration: String::new(),
+            configuration_path: data_path
+                .with_file_name("v2rayq-client.json")
+                .display()
+                .to_string(),
+            use_preferences: false,
             data_path,
             form: NodeForm::None,
             share_link: String::new(),
@@ -163,20 +200,43 @@ impl ClientApp {
             match result {
                 Ok(reply) => {
                     if let Some(data) = reply.profile {
+                        if matches!(completion, Completion::Merge) {
+                            self.routing = Some((
+                                data.settings.route_mode,
+                                data.settings.dns_server.to_owned(),
+                            ));
+                        }
                         self.routing.get_or_insert_with(|| {
                             (
                                 data.settings.route_mode,
                                 data.settings.dns_server.to_owned(),
                             )
                         });
+                        let requested = if data.settings.language.is_empty() {
+                            v2rayq_i18n::system_language()
+                        } else {
+                            data.settings.language.to_owned()
+                        };
+                        self.translator = language::RESOURCES.translator(&requested);
                         self.profile = data;
                         self.confirm_subscription = None;
+                    }
+                    if let Some(info) = reply.ip_info {
+                        self.ip_info = Some(info);
                     }
                     if let Some(runtime) = reply.runtime {
                         self.runtime = runtime;
                     }
                     match completion {
                         Completion::NodeForm(form) => {
+                            if matches!(form, NodeForm::Manual | NodeForm::Share)
+                                && self.group_filter.starts_with("subscription")
+                            {
+                                self.group_filter = "local".into();
+                            }
+                            if form == NodeForm::Subscription && self.subscription_edit.is_none() {
+                                self.group_filter = "subscriptions".into();
+                            }
                             if form == NodeForm::Share {
                                 self.share_link.clear();
                             }
@@ -191,9 +251,28 @@ impl ClientApp {
                         }
                         Completion::Endpoint => self.endpoint_editor = None,
                         Completion::Rule => self.rule_editor = None,
+                        Completion::Merge => self.configuration.clear(),
+                        Completion::Network => self.ip_info = None,
+                        Completion::Group => {
+                            self.group_edit = None;
+                            self.group_name.clear();
+                        }
                         Completion::Other => {}
                     }
-                    if let Some(message) = reply.message {
+                    if let Some(configuration) = reply.configuration {
+                        self.configuration = configuration;
+                        self.notice = "Configuration exported".into();
+                    }
+                    let merged = reply.merge.is_some();
+                    if let Some(summary) = reply.merge {
+                        self.notice = format!(
+                            "{} nodes · {} subscriptions · {} rules · {} duplicates",
+                            summary.nodes, summary.subscriptions, summary.rules, summary.duplicates
+                        );
+                    }
+                    if let Some(message) = reply.message
+                        && !merged
+                    {
                         self.notice = message;
                     }
                 }
@@ -226,14 +305,15 @@ impl ClientApp {
     }
 
     fn nav_items(&mut self, ui: &mut egui::Ui, vertical: bool) {
+        let tr = self.translator;
         for (page, item) in [Page::Home, Page::Nodes, Page::Routing, Page::Settings]
             .into_iter()
             .zip(CLIENT_NAV)
         {
             let label = if vertical {
-                format!("{}   {}", item.icon, item.title)
+                format!("{}   {}", item.icon, tr.text(item.title))
             } else {
-                item.title.into()
+                tr.text(item.title).into()
             };
             let button =
                 egui::Button::new(RichText::new(label).size(15.0)).selected(self.page == page);
@@ -255,6 +335,7 @@ impl ClientApp {
 impl eframe::App for ClientApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.receive();
+        self.receive_scan(ui.ctx());
         self.navigation(ui);
         let margin = if ui.available_width() < 520.0 { 14 } else { 26 };
         egui::CentralPanel::default()
@@ -269,7 +350,7 @@ impl eframe::App for ClientApp {
                         ui.spinner();
                     }
                     if !self.notice.is_empty() {
-                        ui.label(RichText::new(&self.notice).color(INK));
+                        ui.label(RichText::new(self.translator.message(&self.notice)).color(INK));
                     }
                     match self.page {
                         Page::Home => self.home(ui),

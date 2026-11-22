@@ -54,3 +54,40 @@ textarea { width: 100%; min-height: 200px; padding: 10px; margin-bottom: 8px; re
 .editor-field select { border: 1px solid var(--edge); border-radius: 7px; width: 100%; padding: 7px 10px; font: inherit; color: var(--ink); background: #f9fbfe; }
 .editor-field select:focus-visible { outline: 2px solid #23a89b; outline-offset: 2px; }
 .record-title small { display: block; color: var(--muted); }
+.language-control { display: grid; gap: 5px; color: #c9d8ed; padding: 0 7px; margin-bottom: 18px; font-size: 13px; }
+.language-control select { font: inherit; border: 1px solid #466078; border-radius: 7px; padding: 5px 8px; color: #eff6ff; background: #21334e; width: 100%; }
+
+/* Compact management surfaces with the same edit/save/cancel rhythm as clients. */
+body { background: #f5f7fb; }
+.rail { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: #14283b; }
+main { max-width: 1440px; }
+#view { display: grid; gap: 16px; }
+h1 { letter-spacing: -.035em; font-size: clamp(28px, 4vw, 36px); }
+.panel { border-radius: 15px; border-color: #e0e7ee; padding: 20px; box-shadow: 0 2px 8px #183b4d04; }
+.server-hero { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding: 27px; background: linear-gradient(115deg, #163b48, #1e5e66); color: #effffc; border-radius: 18px; }
+.server-hero h2 { font-size: clamp(23px, 3vw, 30px); margin: 6px 0; letter-spacing: -.025em; }
+.server-hero p { margin: 0; color: #bddbd9; max-width: 550px; }
+.eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: 12px; font-weight: 650; color: #a3d5ce; }
+.core-badge { border: 1px solid #6ea69e; border-radius: 22px; padding: 7px 13px; font-size: 12px; white-space: nowrap; }
+.metrics { margin-bottom: 0; }
+.metrics .panel { position: relative; }
+.metric-icon { float: right; display: grid; place-items: center; color: #187d71; background: #e5f3ef; width: 34px; height: 34px; border-radius: 10px; font-size: 20px; }
+.metric { color: #183f4a; font-size: 35px; margin: 10px 0 14px; }
+.workflow-step { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 16px 0; border-top: 1px solid var(--edge); }
+.step-number { display: grid; place-items: center; min-width: 36px; height: 36px; border-radius: 10px; color: var(--accent); background: #e6f2ef; font-size: 12px; font-weight: 750; }
+.workflow-step > div:not(.actions) { flex: 1 1 200px; }
+.workflow-step p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+.record-search { display: block; width: 100%; border: 1px solid var(--edge); background: #f9fbfd; border-radius: 8px; color: var(--ink); padding: 9px 11px; margin-bottom: 13px; font: inherit; }
+.record-search:focus-visible { outline: 2px solid #23a89b; outline-offset: 2px; }
+.empty-state { text-align: center; color: var(--muted); padding: 26px 10px; }
+[hidden] { display: none !important; }
+.record-state { color: var(--accent); }
+.editor-layout { grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr); }
+.editor-layout > .panel:only-child { grid-column: 1 / -1; max-width: 780px; width: 100%; }
+@media (max-width: 960px) { .editor-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 690px) {
+  .rail { position: static; height: auto; overflow: visible; }
+  .server-hero { padding: 21px; }
+  .workflow-step { align-items: start; }
+  .workflow-step .actions { width: 100%; padding-left: 50px; }
+}

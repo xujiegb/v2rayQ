@@ -18,8 +18,10 @@ jobs:
       - run: cargo check -p v2rayQ --features legacy-tui
       - run: cargo test -p v2rayq-contracts
       - run: cargo test -p v2rayq-http-preview
+      - run: cargo test -p v2rayq-i18n
       - run: cargo build --locked -p v2rayq-server -p v2rayq-web-client -p v2rayq-cli
       - run: python3 tools/test_panel_api.py
+      - run: python3 tools/check_locales.py
       - run: python3 tools/check_ui_parity.py
       - run: python3 tools/check_workspace_boundaries.py
       - name: Check first-party safe Rust policy

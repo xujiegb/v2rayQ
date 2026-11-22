@@ -1,3 +1,4 @@
+import { loadLocalization } from "./i18n.js";
 import { transport } from "./transport.mjs";
 import { fields, defaults, choices } from "./server-fields.mjs";
 
@@ -16,12 +17,16 @@ const serverPages = [
   ["administrators", "Administrators", "♙", "Administration"],
   ["settings", "Settings", "⚙", "Administration"]
 ];
+const i18n = await loadLocalization(new URL("./locales/", import.meta.url), "server");
 const nav = document.getElementById("navigation");
 const heading = document.getElementById("heading");
 const notice = document.getElementById("notice");
 const view = document.getElementById("view");
 let send;
 let active = 0;
+let dirty = false;
+let savingPage = false;
+window.addEventListener("beforeunload", event => { if (dirty) { event.preventDefault(); event.returnValue = ""; } });
 
 function element(tag, className = "", text) {
   const node = document.createElement(tag);
@@ -30,8 +35,17 @@ function element(tag, className = "", text) {
   return node;
 }
 
+function localizedElement(tag, className, key, values) {
+  return i18n.bind(element(tag, className), key, values);
+}
+
+function updateLanguage() {
+  i18n.update(document);
+  document.getElementById("navigation").setAttribute("aria-label", i18n.text("Server navigation"));
+}
+
 function button(label, action, className = "") {
-  const node = element("button", className, label);
+  const node = label ? localizedElement("button", className, label) : element("button", className);
   node.type = "button";
   node.onclick = action;
   return node;
@@ -39,24 +53,47 @@ function button(label, action, className = "") {
 
 function panel(title, ...children) {
   const node = element("section", "panel");
-  node.append(element("h2", "", title), ...children);
+  node.append(localizedElement("h2", "", title), ...children);
   return node;
 }
 
 function infoRow(name, value) {
   const row = element("div", "info-row");
-  row.append(element("span", "", name), element("strong", "", String(value ?? "Unavailable")));
+  row.append(localizedElement("span", "", name), localizedElement("strong", "", String(value ?? "Unavailable")));
   return row;
 }
 
 function overview(status) {
+  const hero = element("section", "server-hero");
+  const copy = element("div");
+  copy.append(localizedElement("span", "eyebrow", "Server workspace"),
+    localizedElement("h2", "", "Configure with clarity."),
+    localizedElement("p", "", "Review your endpoints, security profiles and users in one place."));
+  const badge = localizedElement("span", "core-badge", status.core_connected ? "Connected" : "Awaiting adapter");
+  hero.append(copy, badge);
   const topline = element("div", "metrics");
-  for (const [key, label] of [["inbounds", "Inbounds"], ["users", "Users"], ["outbounds", "Outbounds"], ["nodes", "Nodes"]]) {
+  for (const [key, label, glyph] of [["inbounds", "Inbounds", "⇥"], ["users", "Users", "♙"], ["outbounds", "Outbounds", "⇤"], ["nodes", "Nodes", "◇"]]) {
     const count = panel(label, element("strong", "metric", String(status.counts[key])));
+    count.prepend(element("span", "metric-icon", glyph));
     count.append(button("Open", () => open(key)));
     topline.append(count);
   }
-  return [topline, panel("Deployment",
+  const setup = panel("Configuration workflow");
+  const steps = [
+    ["01", "Security", "Add TLS certificates or a REALITY profile.", [["tls", "TLS"], ["reality", "REALITY"]]],
+    ["02", "Endpoints", "Configure inbounds, outbounds and nodes.", [["inbounds", "Inbounds"], ["nodes", "Nodes"]]],
+    ["03", "Users", "Review users and save your service drafts.", [["users", "Users"], ["services", "Services"]]]
+  ];
+  for (const [number, title, description, links] of steps) {
+    const row = element("div", "workflow-step");
+    const copy = element("div");
+    copy.append(localizedElement("strong", "", title), localizedElement("p", "", description));
+    const actions = element("div", "actions");
+    for (const [key, label] of links) actions.append(button(label, () => open(key)));
+    row.append(element("span", "step-number", number), copy, actions);
+    setup.append(row);
+  }
+  return [hero, topline, setup, panel("Deployment",
     infoRow("Core connection", status.core_connected ? "Connected" : "Awaiting adapter"),
     infoRow("Configuration", "Saved drafts"),
     infoRow("Administrative access", "Local launch session or Cockpit"))];
@@ -70,10 +107,12 @@ function editor(section, title, draft, profiles = {}) {
   const inputs = element("fieldset", "editor-fields");
   const advanced = element("details", "raw-editor");
   const textarea = element("textarea");
-  textarea.setAttribute("aria-label", `${title} JSON`);
+  textarea.setAttribute("aria-label", i18n.text(title));
+  textarea.dataset.i18nLabel = title;
   textarea.spellcheck = false;
-  advanced.append(element("summary", "", "Edit JSON"), textarea);
-  const label = element("h2", "", "Edit configuration");
+  textarea.oninput = () => { dirty = true; };
+  advanced.append(localizedElement("summary", "", "Edit JSON"), textarea);
+  const label = localizedElement("h2", "", "Edit configuration");
   const edit = element("section", "panel edit");
   const list = panel(title);
   let current = {};
@@ -91,7 +130,7 @@ function editor(section, title, draft, profiles = {}) {
       if (!input) continue;
       const [parent, allowed] = visible;
       input.disabled = !allowed.includes(value(parent));
-      if (parent === "transport" && !["vless", "vmess", "trojan"].includes(value("protocol"))) input.disabled = true;
+      if (parent === "transport" && !["vless", "vmess", "trojan"].includes(value("protocol") || value("type"))) input.disabled = true;
       input.parentElement.hidden = input.disabled;
     }
     const options = inputs.querySelector("datalist");
@@ -113,19 +152,20 @@ function editor(section, title, draft, profiles = {}) {
         || (kind === "port" && typeof value === "number") || (kind === "boolean" && typeof value === "boolean")
         || (kind !== "list" && kind !== "port" && kind !== "boolean" && typeof value === "string");
       if (!compatible) continue; // Keep structured or legacy values editable in the JSON view.
-      const wrapper = element("label", "editor-field", title);
+      const wrapper = element("label", "editor-field");
+      wrapper.append(localizedElement("span", "", title));
       const select = choices[kind];
       const input = element(select ? "select" : "input");
       input.name = key;
       if (select) {
-        input.setAttribute("aria-label", title);
+        input.setAttribute("aria-label", i18n.text(title)); input.dataset.i18nLabel = title;
         const values = new Map(Object.entries(select));
         if (value && !values.has(value)) values.set(value, value);
-        const empty = element("option", "", "Select…");
+        const empty = localizedElement("option", "", "Select…");
         empty.value = "";
         input.append(empty);
         for (const [id, label] of values) {
-          const option = element("option", "", label);
+          const option = localizedElement("option", "", label);
           option.value = id;
           input.append(option);
         }
@@ -138,15 +178,16 @@ function editor(section, title, draft, profiles = {}) {
         input.type = kind === "port" ? "number" : kind === "secret" ? "password" : "text";
         if (kind === "port") { input.min = "1"; input.max = "65535"; }
         if (kind === "secret") input.autocomplete = "new-password";
-        if (kind === "list") input.placeholder = "Separate values with commas";
+        if (kind === "list") { input.placeholder = i18n.text("Separate values with commas"); input.dataset.i18nPlaceholder = "Separate values with commas"; }
         if (kind === "profile") input.setAttribute("list", "security-profiles");
         input.value = Array.isArray(value) ? value.join(", ") : value ?? "";
       }
-      input.oninput = () => { input.dataset.edited = "true"; if (select) refreshFields(); };
+      input.oninput = () => { input.dataset.edited = "true"; dirty = true; if (select) refreshFields(); };
+      input.onchange = input.oninput;
       wrapper.append(input);
       inputs.append(wrapper);
     }
-    if (section === "nodes") {
+    if (["nodes", "inbounds", "outbounds"].includes(section)) {
       const options = element("datalist");
       options.id = "security-profiles";
       inputs.append(options);
@@ -189,7 +230,7 @@ function editor(section, title, draft, profiles = {}) {
         current = jsonValue();
         drawFields();
       } catch {
-        notice.textContent = "Enter a valid JSON object before returning to the form.";
+        notice.textContent = i18n.text("Enter a valid JSON object before returning to the form.");
         return;
       }
     } else {
@@ -203,12 +244,14 @@ function editor(section, title, draft, profiles = {}) {
 
   function start(value, position) {
     if (saving) return;
+    if (dirty && !window.confirm(i18n.text("Discard unsaved changes?"))) return;
+    dirty = false;
     index = position;
     current = value;
     advanced.open = false;
     inputs.hidden = false;
     drawFields();
-    label.textContent = position === null && isList ? "New record" : "Edit configuration";
+    i18n.bind(label, position === null && isList ? "New record" : "Edit configuration");
     edit.hidden = false;
     if (isList) inputs.querySelector("input")?.focus();
   }
@@ -216,60 +259,89 @@ function editor(section, title, draft, profiles = {}) {
   async function save(value) {
     if (saving) return;
     saving = true;
+    savingPage = true;
+    inputs.disabled = true;
+    textarea.disabled = true;
     controls.querySelectorAll("button").forEach(control => { control.disabled = true; });
     try {
       const result = await send({ action: "save", section, revision: draft.revision, value });
       draft = { revision: result.revision, value };
+      dirty = false;
       if (!layout.isConnected) return;
-      notice.textContent = "Draft saved.";
+      notice.textContent = i18n.text("Draft saved.");
       if (isList) { edit.hidden = true; drawList(); }
       else current = value;
     } catch (error) {
-      if (layout.isConnected) notice.textContent = error.message;
+      if (layout.isConnected) notice.textContent = i18n.message(error.message);
     } finally {
       saving = false;
+      savingPage = false;
+      inputs.disabled = false;
+      textarea.disabled = false;
       controls.querySelectorAll("button").forEach(control => { control.disabled = false; });
     }
   }
 
+  let query = "";
   function drawList() {
     const header = element("div", "list-header");
-    header.append(element("h2", "", `${draft.value.length} saved records`),
+    header.append(localizedElement("h2", "", "{count} saved records", { count: draft.value.length }),
       button("Add record", () => start(defaults[section] || {}, null), "primary"));
-    list.replaceChildren(header);
+    const search = element("input", "record-search");
+    search.type = "search";
+    search.placeholder = i18n.text("Search records");
+    search.setAttribute("aria-label", i18n.text("Search records"));
+    search.dataset.i18nPlaceholder = "Search records";
+    search.dataset.i18nLabel = "Search records";
+    search.value = query;
+    const rows = element("div", "record-rows");
+    search.oninput = () => {
+      query = search.value;
+      for (const row of rows.children) row.hidden = !row.dataset.search.includes(query.trim().toLowerCase());
+    };
+    list.replaceChildren(header, search, rows);
+    if (!draft.value.length) list.append(localizedElement("p", "empty-state", "No records yet. Add one to get started."));
     draft.value.forEach((record, i) => {
       const row = element("div", "info-row");
       const candidate = record.name || record.tag || record.username || record.outbound;
-      const name = typeof candidate === "string" && candidate ? candidate : `Record ${i + 1}`;
+      const named = typeof candidate === "string" && candidate;
+      const name = named ? candidate : i18n.format("Record {index}", { index: i + 1 });
       const operations = element("div", "actions");
       operations.append(button("Edit", () => start(record, i)), button("Delete", () => {
-        if (!saving && window.confirm(`Delete ${name}?`)) save(draft.value.filter((_, position) => position !== i));
+        if (!saving && window.confirm(i18n.format("Delete {name}?", { name }))) save(draft.value.filter((_, position) => position !== i));
       }, "danger"));
       const details = element("div", "record-title");
-      details.append(element("strong", "", name));
+      details.append(named ? element("strong", "", name)
+        : localizedElement("strong", "", "Record {index}", { index: i + 1 }));
       if (section === "nodes") {
         const endpoint = typeof record.server === "string" && record.server_port ? `${record.server}:${record.server_port}` : record.server;
         const protocol = record.protocol || record.type;
-        const summary = [choices.protocol[protocol] || protocol, endpoint, choices.security[record.security]]
+        const summary = [choices.protocol[protocol] || protocol, endpoint, i18n.text(choices.security[record.security] || "")]
           .filter(value => typeof value === "string" && value).join(" · ");
         if (summary) details.append(element("small", "", summary));
       }
+      row.dataset.search = [name, record.type, record.protocol, record.server, record.listen, record.username].filter(value => typeof value === "string").join(" ").toLowerCase();
+      row.hidden = !row.dataset.search.includes(query.trim().toLowerCase());
+      if (typeof record.enabled === "boolean") details.append(localizedElement("small", "record-state", record.enabled ? "Enabled" : "Disabled"));
       row.append(details, operations);
-      list.append(row);
+      rows.append(row);
     });
   }
 
   const submit = button("Save draft", null, "primary");
   submit.type = "submit";
   controls.append(submit);
-  if (isList) controls.append(button("Cancel", () => { edit.hidden = true; }));
+  if (isList) controls.append(button("Cancel", () => {
+    if (dirty && !window.confirm(i18n.text("Discard unsaved changes?"))) return;
+    dirty = false; edit.hidden = true;
+  }));
   form.append(inputs, advanced, controls);
   form.onsubmit = event => {
     event.preventDefault();
     if (saving) return;
     let value;
     try { value = advanced.open ? jsonValue() : fieldValues(); }
-    catch { notice.textContent = "Enter a valid JSON object."; return; }
+    catch { notice.textContent = i18n.text("Enter a valid JSON object."); return; }
     if (!isList) { save(value); return; }
     const records = [...draft.value];
     if (index === null) records.push(value);
@@ -285,13 +357,16 @@ function editor(section, title, draft, profiles = {}) {
     start(draft.value, null);
     layout.append(edit);
   }
-  return [element("p", "draft-label", "Saved drafts are independent of the running proxy Core."), layout];
+  return [localizedElement("p", "draft-label", "Saved drafts are independent of the running proxy Core."), layout];
 }
 
 async function open(key) {
+  if (savingPage) return;
+  if (dirty && !window.confirm(i18n.text("Discard unsaved changes?"))) return;
+  dirty = false;
   const request = ++active;
   const page = serverPages.find(([id]) => id === key);
-  heading.textContent = page[1];
+  i18n.bind(heading, page[1]);
   nav.querySelectorAll("button").forEach(item => {
     if (item.dataset.page === key) item.setAttribute("aria-current", "page");
     else item.removeAttribute("aria-current");
@@ -301,7 +376,7 @@ async function open(key) {
   try {
     const command = key === "overview" || key === "system" ? { action: key } : { action: "load", section: key };
     const [value, profiles] = await Promise.all([
-      send(command), key === "nodes" ? send({ action: "security_profiles" }) : undefined
+      send(command), ["nodes", "inbounds", "outbounds"].includes(key) ? send({ action: "security_profiles" }) : undefined
     ]);
     if (request !== active) return;
     if (key === "overview") view.append(...overview(value));
@@ -312,7 +387,7 @@ async function open(key) {
       view.append(...editor(key, page[1], value, profiles));
     }
   } catch (error) {
-    if (request === active) notice.textContent = error.message;
+    if (request === active) notice.textContent = i18n.message(error.message);
   }
 }
 
@@ -320,19 +395,44 @@ let group;
 for (const [key, title, icon, section] of serverPages) {
   if (group !== section) {
     group = section;
-    nav.append(element("div", "nav-group", group));
+    nav.append(localizedElement("div", "nav-group", group));
   }
   const item = button("", () => open(key), "nav-item");
   item.dataset.page = key;
   const glyph = element("span", "nav-icon", icon);
   glyph.setAttribute("aria-hidden", "true");
-  item.append(glyph, element("span", "", title));
+  item.append(glyph, localizedElement("span", "", title));
   nav.append(item);
 }
 
 try {
   send = await transport("v2rayq-server");
+  const preference = await send({ action: "language" });
+  await i18n.use(preference.language);
+  const label = element("label", "language-control");
+  label.append(localizedElement("span", "", "Language"));
+  const choice = element("select");
+  choice.dataset.i18nLabel = "Language";
+  for (const item of i18n.languages) {
+    const option = element("option", "", item.name);
+    option.value = item.code;
+    choice.append(option);
+  }
+  choice.value = i18n.code;
+  choice.onchange = async () => {
+    choice.disabled = true;
+    try {
+      await send({ action: "save_language", language: choice.value });
+      await i18n.use(choice.value);
+      updateLanguage();
+    } catch (error) { notice.textContent = i18n.message(error.message); }
+    finally { choice.disabled = false; choice.value = i18n.code; }
+  };
+  label.append(choice);
+  document.querySelector(".rail").insertBefore(label, nav);
+  document.querySelector(".brand small").dataset.i18n = "Server";
+  updateLanguage();
   open("overview");
 } catch (error) {
-  notice.textContent = error.message;
+  notice.textContent = i18n.message(error.message);
 }

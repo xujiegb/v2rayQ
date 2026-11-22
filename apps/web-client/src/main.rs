@@ -1,11 +1,16 @@
 #![forbid(unsafe_code)]
 
 use serde_json::json;
-use v2rayQ::client::{Access, ClientService, Command};
+use v2rayQ::client::{Access, ClientService, Command, language};
 use v2rayq_contracts::WEB_CLIENT_PORT;
 use v2rayq_http_preview::{Asset, Panel, serve};
 
 const ASSETS: &[Asset] = &[
+    Asset {
+        path: "/assets/i18n.js",
+        mime: "text/javascript; charset=utf-8",
+        body: include_str!("../../../frontends/luci/htdocs/luci-static/resources/v2rayq/i18n.js"),
+    },
     Asset {
         path: "/assets/client-ui.js",
         mime: "text/javascript; charset=utf-8",
@@ -39,6 +44,8 @@ fn main() -> std::io::Result<()> {
             title: "Client",
             html: include_str!("../../../frontends/web/client.html"),
             assets: ASSETS,
+            locales: language::LOCALES,
+            locale_manifest: language::MANIFEST,
         },
         WEB_CLIENT_PORT,
         move |body| {

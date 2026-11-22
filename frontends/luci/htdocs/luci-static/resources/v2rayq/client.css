@@ -42,6 +42,8 @@
 .vq-client .vq-form p { grid-column: 1 / -1; }
 .vq-client .vq-form .vq-button { justify-self: start; }
 .vq-client .vq-field { display: grid; gap: 5px; color: var(--vq-muted); font-weight: 600; }
+.vq-client .vq-check { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 8px; }
+.vq-client .vq-check input { margin: 0; accent-color: var(--vq-brand); }
 .vq-client .vq-field input:not([type="checkbox"]), .vq-client .vq-field select { color: var(--vq-ink); background: white; border: 1px solid var(--vq-edge); padding: 7px 10px; border-radius: 8px; font: inherit; width: 100%; }
 @media (max-width: 710px) {
   .vq-client { display: block; }
@@ -65,3 +67,37 @@
 .vq-client .vq-import-form textarea { width: 100%; min-height: 112px; resize: vertical; padding: 8px 10px; border: 1px solid var(--vq-edge); border-radius: 8px; color: var(--vq-ink); background: white; font: 14px/1.5 ui-monospace, monospace; }
 .vq-client .vq-import-form textarea:focus-visible { outline: 2px solid #586be2; outline-offset: 2px; }
 .vq-client .vq-file { width: min(100%, 400px); }
+
+/* Dashboard and collection controls share the same small styles on every Web host. */
+.vq-client { background: #f5f7fb; }
+.vq-client .vq-rail { background: #edf1f8; }
+.vq-client .vq-heading { letter-spacing: -.035em; margin-bottom: 4px; }
+.vq-client .vq-page-intro { margin: -8px 0 5px; }
+.vq-client .vq-card { border-color: #e0e7f1; border-radius: 16px; padding: 21px; box-shadow: 0 2px 8px #24345e04; }
+.vq-client .vq-hero { padding: 26px 28px; background: linear-gradient(115deg, #1c2b4b, #374c87); border-radius: 18px; }
+.vq-client .vq-hero-kicker { text-transform: uppercase; letter-spacing: .07em; margin-bottom: 9px; }
+.vq-client .vq-connection-control { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
+.vq-client .vq-connection-control .vq-field { min-width: 140px; }
+.vq-client .vq-connection-control .vq-field select { padding: 6px 9px; }
+.vq-client .vq-switch { border-radius: 24px; padding: 9px 17px; color: white; background: #4354c3; border-color: #4354c3; }
+.vq-client .vq-switch[aria-checked="true"] { background: #177a65; border-color: #177a65; }
+.vq-client .vq-status { display: inline-flex; align-items: center; gap: 7px; color: var(--vq-muted); font-size: 13px; }
+.vq-client .vq-status::before { content: ""; height: 7px; width: 7px; border-radius: 50%; background: #a8b3c7; }
+.vq-client .vq-online::before { background: #1d9774; }
+.vq-client .vq-dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 14px; }
+.vq-client .vq-traffic { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; padding: 17px 0; }
+.vq-client .vq-speed-label { display: block; font-size: 13px; color: var(--vq-muted); margin-bottom: 8px; }
+.vq-client .vq-speed strong { font-size: clamp(23px, 3vw, 32px); font-weight: 720; letter-spacing: -.03em; }
+.vq-client .vq-ip { display: block; font-size: 24px; margin: 14px 0 8px; overflow-wrap: anywhere; }
+.vq-client .vq-hint { font-size: 12px; line-height: 1.6; margin-top: 12px; }
+.vq-client .vq-group-manager { display: grid; gap: 14px; }
+.vq-client .vq-group-details summary { cursor: pointer; color: var(--vq-brand); font-weight: 650; }
+.vq-client .vq-group-form { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.vq-client .vq-group-form .vq-field { flex: 1 1 180px; }
+.vq-client .vq-row .vq-field { min-width: 120px; font-size: 12px; }
+.vq-client .vq-row .vq-actions { align-items: end; }
+@media (max-width: 710px) {
+  .vq-client .vq-card { padding: 17px; }
+  .vq-client .vq-connection-control { gap: 10px; }
+  .vq-client .vq-connection-control .vq-field { flex: 1 1 140px; }
+}

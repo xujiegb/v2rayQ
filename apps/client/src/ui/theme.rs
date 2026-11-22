@@ -3,15 +3,27 @@ use super::*;
 pub(super) fn install_font_fallback(ctx: &egui::Context) {
     let candidates = [
         "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/LanguageSupport/PingFang.ttc",
+        "/system/fonts/NotoSansCJK-Regular.ttc",
+        "/system/fonts/NotoSansCJK-VF.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/local/share/fonts/noto/NotoSansCJK-Regular.ttc",
+        "/usr/local/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
         "C:\\Windows\\Fonts\\msyh.ttc",
     ];
     for path in candidates {
         if let Ok(bytes) = std::fs::read(path) {
             let mut fonts = egui::FontDefinitions::default();
-            fonts.font_data.insert("system-cjk".into(), egui::FontData::from_owned(bytes).into());
-            fonts.families.entry(egui::FontFamily::Proportional).or_default().push("system-cjk".into());
+            fonts.font_data.insert(
+                "system-cjk".into(),
+                egui::FontData::from_owned(bytes).into(),
+            );
+            fonts
+                .families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .push("system-cjk".into());
             ctx.set_fonts(fonts);
             return;
         }

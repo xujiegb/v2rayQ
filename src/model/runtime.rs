@@ -10,6 +10,7 @@ pub struct RuntimeSettings {
     pub transparent_proxy_requested: bool,
     pub system_proxy_requested: bool,
     pub route_mode: RouteMode,
+    pub language: String,
     pub dns_server: String,
     pub route_rules: Vec<RouteRule>,
 }

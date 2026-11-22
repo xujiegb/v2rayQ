@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-v2rayq
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=2
+PKG_RELEASE:=3
 PKG_LICENSE:=BSD-3-Clause
 
 include $(INCLUDE_DIR)/package.mk
@@ -21,6 +21,7 @@ define Package/luci-app-v2rayq/description
 endef
 
 define Build/Compile
+	python3 $(CURDIR)/../../tools/prepare_locales.py client $(PKG_BUILD_DIR)/locales
 endef
 
 define Package/luci-app-v2rayq/install
@@ -28,6 +29,8 @@ define Package/luci-app-v2rayq/install
 	$(INSTALL_DATA) ./htdocs/luci-static/resources/view/v2rayq/client.js $(1)/www/luci-static/resources/view/v2rayq/client.js
 	$(INSTALL_DIR) $(1)/www/luci-static/resources/v2rayq
 	$(INSTALL_DATA) ./htdocs/luci-static/resources/v2rayq/* $(1)/www/luci-static/resources/v2rayq/
+	$(INSTALL_DIR) $(1)/www/luci-static/resources/v2rayq/locales
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/locales/* $(1)/www/luci-static/resources/v2rayq/locales/
 	$(INSTALL_DIR) $(1)/usr/share/luci/menu.d $(1)/usr/share/rpcd/acl.d $(1)/usr/libexec/rpcd
 	$(INSTALL_DATA) ./root/usr/share/luci/menu.d/luci-app-v2rayq.json $(1)/usr/share/luci/menu.d/
 	$(INSTALL_DATA) ./root/usr/share/rpcd/acl.d/luci-app-v2rayq.json $(1)/usr/share/rpcd/acl.d/
