@@ -297,7 +297,10 @@ impl ClientApp {
                 form_row(ui, "Name", &mut self.manual.name);
                 form_row(ui, "Server", &mut self.manual.host);
                 form_row(ui, "Port", &mut self.manual.port);
-                form_row(ui, "UUID / password", &mut self.manual.credential);
+                ui.horizontal(|ui| {
+                    ui.add_sized([175.0, 22.0], egui::Label::new("UUID / password"));
+                    ui.add_sized([340.0, 25.0], egui::TextEdit::singleline(&mut self.manual.credential).password(true));
+                });
                 if self.manual.protocol == 3 {
                     form_row(ui, "Cipher", &mut self.manual.method);
                 }
@@ -310,6 +313,11 @@ impl ClientApp {
                             self.data.add_node(node);
                             self.notice = "Node saved".into();
                             self.add_manual = false;
+                            self.manual = ManualForm {
+                                port: "443".to_owned(),
+                                method: "aes-128-gcm".to_owned(),
+                                ..Default::default()
+                            };
                             self.save();
                         }
                         Err(error) => self.notice = error,
