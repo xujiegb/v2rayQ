@@ -68,6 +68,7 @@ impl ClientApp {
                 (NodeForm::Subscription, "Add subscription"),
             ] {
                 if ui.selectable_label(self.form == form, name).clicked() {
+                    self.endpoint_editor = None;
                     self.form = if self.form == form {
                         NodeForm::None
                     } else {
@@ -98,7 +99,7 @@ impl ClientApp {
                 NodeForm::Manual => card(ui, |ui| self.manual_node(ui)),
                 NodeForm::None => {}
             }
-            let mut action = None;
+            let mut action = self.endpoint_form(ui);
             card(ui, |ui| {
                 ui.strong("Saved nodes");
                 if self.profile.nodes.is_empty() {
@@ -148,8 +149,28 @@ impl ClientApp {
                             ))
                             .color(MUTED),
                         );
+                        if node.subscription_id.is_some() {
+                            if ui.small_button("Make local copy").clicked() {
+                                action = Some(Command::CopyNode { id: node.id });
+                            }
+                        } else if ui.small_button("Edit endpoint").clicked() {
+                            self.form = NodeForm::None;
+                            self.endpoint_editor = Some(EndpointEditor {
+                                id: node.id,
+                                name: node.name.to_owned(),
+                                host: node.host.to_owned(),
+                                port: node.port.to_string(),
+                            });
+                        }
                         if ui.small_button("Delete").clicked() {
                             action = Some(Command::RemoveNode { id: node.id });
+                            if self
+                                .endpoint_editor
+                                .as_ref()
+                                .is_some_and(|editor| editor.id == node.id)
+                            {
+                                self.endpoint_editor = None;
+                            }
                         }
                     });
                 }
@@ -211,6 +232,33 @@ impl ClientApp {
                 self.send(action);
             }
         });
+    }
+
+    fn endpoint_form(&mut self, ui: &mut egui::Ui) -> Option<Command> {
+        let editor = self.endpoint_editor.as_mut()?;
+        let mut action = None;
+        let mut cancel = false;
+        card(ui, |ui| {
+            ui.strong("Edit node endpoint");
+            form_row(ui, "Name", &mut editor.name, false);
+            form_row(ui, "Server", &mut editor.host, false);
+            form_row(ui, "Port", &mut editor.port, false);
+            ui.horizontal(|ui| {
+                if ui.button("Save endpoint").clicked() {
+                    action = Some(Command::UpdateNode {
+                        id: editor.id,
+                        name: editor.name.to_owned(),
+                        host: editor.host.to_owned(),
+                        port: editor.port.to_owned(),
+                    });
+                }
+                cancel = ui.button("Cancel").clicked();
+            });
+        });
+        if cancel {
+            self.endpoint_editor = None;
+        }
+        action
     }
 
     fn manual_node(&mut self, ui: &mut egui::Ui) {
@@ -280,34 +328,6 @@ impl ClientApp {
                 Err(error) => self.notice = error,
             }
         }
-    }
-
-    pub(super) fn routing(&mut self, ui: &mut egui::Ui) {
-        heading(ui, "Routing");
-        card(ui, |ui| {
-            ui.label(
-                "Saved to your client profile. Applies once the Core supports these controls.",
-            );
-            let Some((mode, dns)) = self.routing.as_mut() else {
-                return;
-            };
-            ui.horizontal_wrapped(|ui| {
-                ui.selectable_value(mode, RouteMode::Direct, "Direct");
-                ui.selectable_value(mode, RouteMode::Global, "Global");
-                ui.selectable_value(mode, RouteMode::Rules, "Rule-based");
-            });
-            form_row(ui, "DNS resolver", dns, false);
-            if ui
-                .add_enabled(self.pending == 0, egui::Button::new("Save routing"))
-                .clicked()
-            {
-                let command = Command::SaveRouting {
-                    route_mode: *mode,
-                    dns_server: dns.to_owned(),
-                };
-                self.send(command);
-            }
-        });
     }
 
     pub(super) fn settings(&mut self, ui: &mut egui::Ui) {

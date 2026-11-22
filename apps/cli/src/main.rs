@@ -10,11 +10,14 @@ use serde_json::{Value, json};
 use v2rayQ::client::{Access, ClientService, Command, Reply, runtime::ServiceStatus};
 
 const HELP: &str = "v2rayq-cli
-  status | nodes | subscriptions
+  status | nodes | subscriptions | routes
   add-link                          Read a share link from stdin
   add-node                          Read a manual node JSON object from stdin
   subscribe NAME                    Read an HTTPS subscription URL from stdin
-  select ID | delete ID
+  select ID | delete ID | copy-node ID
+  edit-node ID NAME HOST PORT
+  add-rule | edit-rule ID           Read rule fields as JSON from stdin
+  delete-rule ID | move-rule ID up|down
   refresh ID | unsubscribe ID
   routing direct|global|rules [DNS]
   tun on|off | transparent on|off";
@@ -86,7 +89,7 @@ fn read_input() -> Result<String, String> {
 fn parse(args: &[&str]) -> Result<Command, String> {
     let command: Value = match args {
         ["status"] => json!({ "action": "status" }),
-        ["nodes" | "subscriptions"] => json!({ "action": "profile" }),
+        ["nodes" | "subscriptions" | "routes"] => json!({ "action": "profile" }),
         ["add-link"] => json!({ "action": "add_link", "link": read_input()?.trim() }),
         ["add-node"] => {
             json!({ "action": "add_node", "node": serde_json::from_str::<Value>(&read_input()?)
@@ -94,6 +97,20 @@ fn parse(args: &[&str]) -> Result<Command, String> {
         }
         ["subscribe", name] => {
             json!({ "action": "add_subscription", "name": name, "url": read_input()?.trim() })
+        }
+        ["edit-node", id, name, host, port] => {
+            json!({ "action": "update_node", "id": id, "name": name, "host": host, "port": port })
+        }
+        ["copy-node", id] => json!({ "action": "copy_node", "id": id }),
+        ["add-rule"] | ["edit-rule", _] => {
+            let rule = serde_json::from_str::<Value>(&read_input()?)
+                .map_err(|_| "Invalid route rule JSON")?;
+            let id = args.get(1);
+            json!({ "action": "save_route_rule", "id": id, "rule": rule })
+        }
+        ["delete-rule", id] => json!({ "action": "remove_route_rule", "id": id }),
+        ["move-rule", id, direction] => {
+            json!({ "action": "move_route_rule", "id": id, "direction": direction })
         }
         ["select", id] => json!({ "action": "select_node", "id": id }),
         ["delete", id] => json!({ "action": "remove_node", "id": id }),
@@ -145,6 +162,17 @@ fn print_reply(reply: Reply, args: &[&str]) {
                     item.id,
                     terminal_text(&item.name),
                     item.last_error.as_deref().unwrap_or("Ready")
+                );
+            }
+        } else if args == ["routes"] {
+            for (index, rule) in profile.settings.route_rules.into_iter().enumerate() {
+                println!(
+                    "{}  {}  {}  {} → {}",
+                    index + 1,
+                    rule.id,
+                    rule.fields.kind.label(),
+                    terminal_text(&rule.fields.value),
+                    rule.fields.target.label()
                 );
             }
         }

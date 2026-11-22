@@ -7,6 +7,8 @@ const clientPages = [
 const protocols = { vless: "VLESS", vmess: "VMess", trojan: "Trojan", shadowsocks: "Shadowsocks", any_tls: "AnyTLS", hysteria2: "Hysteria2" };
 const transports = { tcp: "TCP", web_socket: "WebSocket", http: "HTTP", http_upgrade: "HTTP Upgrade", grpc: "gRPC" };
 const modes = { direct: "Direct", global: "Global", rules: "Rule-based" };
+const ruleMatches = { domain: "Domain", domain_suffix: "Domain suffix", ip_cidr: "IP / CIDR", port: "Destination port" };
+const ruleTargets = { proxy: "Selected proxy", direct: "Direct", block: "Block" };
 const services = { tun: "TUN", transparent: "Transparent proxy" };
 
 function element(tag, className = "", text) {
@@ -70,7 +72,10 @@ function serviceLabel(status) {
 }
 
 export function mountClient(root, send, { delegatedControl = false } = {}) {
-  const state = { page: "overview", form: "", busy: false, profile: null, runtime: {}, query: "", nodePage: 0 };
+  const state = {
+    page: "overview", form: "", busy: false, profile: null, runtime: {}, query: "", nodePage: 0,
+    editingNode: null, editingRule: undefined, routingDraft: null
+  };
   const rail = element("aside", "vq-rail");
   const brand = element("div", "vq-brand");
   brand.append(element("span", "vq-mark", "◇"), element("strong", "", "v2rayQ"));
@@ -107,6 +112,8 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
   function navigate(page) {
     state.page = page;
     state.form = "";
+    state.editingNode = null;
+    state.editingRule = undefined;
     render();
   }
 
@@ -190,10 +197,40 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
     return `${node.host.includes(":") ? `[${node.host}]` : node.host}:${node.port}`;
   }
 
+  function endpointForm(node) {
+    const form = element("form", "vq-form");
+    const actions = element("div", "vq-actions");
+    const save = button("Save endpoint", null, "vq-primary");
+    save.type = "submit";
+    actions.append(save, button("Cancel", () => { state.editingNode = null; render(); }));
+    form.append(field("Name", "name", { value: node.name, required: true }),
+      field("Server", "host", { value: node.host, required: true }),
+      field("Port", "port", { value: String(node.port), required: true, numeric: true }), actions);
+    form.onsubmit = event => {
+      event.preventDefault();
+      perform({ action: "update_node", id: node.id, ...Object.fromEntries(new FormData(form)) },
+        () => { state.editingNode = null; });
+    };
+    const editor = card("Edit node endpoint", form);
+    editor.dataset.editor = "endpoint";
+    return editor;
+  }
+
+  function openNodeEditor(id) {
+    state.editingNode = id;
+    state.form = "";
+    render();
+    view.querySelector('[data-editor="endpoint"] input')?.focus();
+  }
+
   function nodeList(profile) {
     const actions = element("div", "vq-actions vq-node-actions");
     for (const [key, title] of [["share", "Import link"], ["manual", "Manual node"], ["subscription", "Add subscription"]]) {
-      const item = button(title, () => { state.form = state.form === key ? "" : key; render(); }, state.form === key ? "vq-primary" : "");
+      const item = button(title, () => {
+        state.form = state.form === key ? "" : key;
+        state.editingNode = null;
+        render();
+      }, state.form === key ? "vq-primary" : "");
       item.setAttribute("aria-pressed", String(state.form === key));
       actions.append(item);
     }
@@ -215,7 +252,13 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
         select.disabled = selected;
         const source = profile.subscriptions.find(item => item.id === node.subscription_id)?.name;
         const detail = `${protocols[node.protocol]} · ${endpoint(node)}${source ? ` · ${source}` : ""}`;
-        return row(node.name, detail, select, button("Delete", () => perform({ action: "remove_node", id: node.id }), "vq-delete"));
+        const edit = node.subscription_id
+          ? button("Make local copy", () => perform({ action: "copy_node", id: node.id }))
+          : button("Edit endpoint", () => openNodeEditor(node.id));
+        return row(node.name, detail, select, edit,
+          button("Delete", () => perform({ action: "remove_node", id: node.id }, () => {
+            if (state.editingNode === node.id) state.editingNode = null;
+          }), "vq-delete"));
       }));
       if (!matches.length) nodeRows.append(element("p", "", query ? "No matching nodes." : "No nodes saved."));
       const nodeCount = `${matches.length} ${matches.length === 1 ? "node" : "nodes"}`;
@@ -243,23 +286,67 @@ export function mountClient(root, send, { delegatedControl = false } = {}) {
       button("Delete", () => {
         if (window.confirm("Delete this subscription and its imported nodes?")) perform({ action: "remove_subscription", id: item.id });
       }, "vq-delete")));
-    return [actions, ...(state.form ? [importForm()] : []),
+    const edited = profile.nodes.find(node => node.id === state.editingNode);
+    return [actions, ...(state.form ? [importForm()] : []), ...(edited ? [endpointForm(edited)] : []),
       card("Saved nodes", search, nodeRows, pagination),
       card("Subscriptions", ...(subscriptions.length ? subscriptions : [element("p", "", "No subscriptions saved.")]))];
+  }
+
+  function ruleEditor(rule) {
+    const form = element("form", "vq-form vq-rule-editor");
+    form.dataset.editor = "rule";
+    const actions = element("div", "vq-actions");
+    const submit = button("Save rule", null, "vq-primary");
+    submit.type = "submit";
+    actions.append(submit, button("Cancel", () => { state.editingRule = undefined; render(); }));
+    form.append(field("Match on", "kind", { choices: ruleMatches, value: rule?.kind || "domain" }),
+      field("Value", "value", { value: rule?.value || "", required: true }),
+      field("Action", "target", { choices: ruleTargets, value: rule?.target || "proxy" }), actions);
+    form.onsubmit = event => {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(form));
+      perform({ action: "save_route_rule", id: rule?.id || null, rule: values }, () => { state.editingRule = undefined; });
+    };
+    return form;
+  }
+
+  function showRuleEditor(id) {
+    state.editingRule = id;
+    render();
+    view.querySelector('[data-editor="rule"] select')?.focus();
   }
 
   function routing(settings) {
     const form = element("form", "vq-form");
     const save = button("Save routing", null, "vq-primary");
     save.type = "submit";
-    form.append(element("p", "", "Saved to your client profile. Applies once the Core supports these controls."),
-      field("Outbound policy", "route_mode", { choices: modes, value: settings.route_mode }),
-      field("DNS resolver", "dns_server", { value: settings.dns_server }), save);
+    const draft = state.routingDraft || settings;
+    form.append(field("Outbound policy", "route_mode", { choices: modes, value: draft.route_mode }),
+      field("DNS resolver", "dns_server", { value: draft.dns_server }), save);
+    form.oninput = () => { state.routingDraft = Object.fromEntries(new FormData(form)); };
     form.onsubmit = event => {
       event.preventDefault();
-      perform({ action: "save_routing", ...Object.fromEntries(new FormData(form)) }, null, false);
+      perform({ action: "save_routing", ...Object.fromEntries(new FormData(form)) }, () => { state.routingDraft = null; }, false);
     };
-    return [card("Profile defaults", form)];
+    const rules = settings.route_rules || [];
+    const header = element("div", "vq-card-header");
+    header.append(element("h2", "", "Route rules"), button("Add rule", () => showRuleEditor(null), "vq-primary"));
+    const rows = rules.map((rule, index) => {
+      const move = direction => perform({ action: "move_route_rule", id: rule.id, direction });
+      const up = button("Move up", () => move("up"));
+      const down = button("Move down", () => move("down"));
+      up.disabled = index === 0;
+      down.disabled = index === rules.length - 1;
+      return row(`${index + 1} · ${rule.value}`, `${ruleMatches[rule.kind]} → ${ruleTargets[rule.target]}`,
+        button("Edit rule", () => showRuleEditor(rule.id)), up, down,
+        button("Delete rule", () => perform({ action: "remove_route_rule", id: rule.id }, () => {
+          if (state.editingRule === rule.id) state.editingRule = undefined;
+        }), "vq-delete"));
+    });
+    const rulesCard = card("", header, element("p", "", "Order is top to bottom. Rules are saved locally for the future Core."));
+    if (state.editingRule !== undefined) rulesCard.append(ruleEditor(rules.find(rule => rule.id === state.editingRule)));
+    rulesCard.append(...(rows.length ? rows : [element("p", "", "No route rules saved.")]));
+    return [card("Profile defaults", form), rulesCard];
   }
 
   function settings() {
