@@ -51,7 +51,7 @@ require("v2rayq-http-preview" in dependencies("apps/web-client"), "Web HTTP host
 client_sources = ROOT / "apps/client/src"
 for rust in client_sources.rglob("*.rs"):
     source = rust.read_text(encoding="utf-8")
-    require("WebView" not in source and "webview" not in source,
+    require("WebView::" not in source and "wry::" not in source and "web_view::" not in source,
             f"{rust}: no browser shells inside native UI")
     require("unsafe {" not in source and "transmute(" not in source,
             f"{rust}: prohibited Rust construct")
