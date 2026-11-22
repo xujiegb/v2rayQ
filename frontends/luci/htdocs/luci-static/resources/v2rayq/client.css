@@ -58,3 +58,6 @@
 .vq-client .vq-card > .vq-field { margin: 9px 0 13px; max-width: 420px; }
 .vq-client .vq-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 9px; }
 .vq-client .vq-pagination small { margin-right: auto; color: var(--vq-muted); }
+.vq-client .vq-card-header { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+.vq-client .vq-card-header h2 { margin: 0; }
+.vq-client .vq-rule-editor { margin: 12px 0; padding: 12px; border: 1px solid var(--vq-edge); border-radius: 8px; background: #f7faff; }
