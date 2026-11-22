@@ -307,5 +307,6 @@
   "Use a PNG or JPEG image up to 4096 × 4096": "Use a PNG or JPEG image up to 4096 × 4096",
   "Scan one subscription QR code at a time": "Scan one subscription QR code at a time",
   "No supported QR code found": "No supported QR code found",
-  "Delete {name}?": "Delete {name}?"
+  "Delete {name}?": "Delete {name}?",
+  "Discard unsaved changes?": "Discard unsaved changes?"
 }

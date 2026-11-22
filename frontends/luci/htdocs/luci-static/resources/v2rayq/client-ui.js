@@ -78,7 +78,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
   const state = {
     page: "overview", form: "", busy: false, profile: null, runtime: {}, query: "", nodePage: 0,
     editingNode: null, editingSubscription: null, editingRule: undefined, routingDraft: null, configuration: "", usePreferences: false,
-    groupFilter: "", groupEdit: null, groupName: "", proxyMode: "tun", ipInfo: null
+    groupFilter: "", groupEdit: null, groupName: "", proxyMode: "tun", ipInfo: null, dirty: false
   };
   const rail = element("aside", "vq-rail");
   const brand = element("div", "vq-brand");
@@ -92,9 +92,20 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
   rail.append(brand, navigation);
   content.append(notice, view);
   root.replaceChildren(rail, content);
+  view.addEventListener("input", event => {
+    if (event.target.closest("form.vq-form, form.vq-import-form")) state.dirty = true;
+  });
+
+  function confirmLeave() {
+    if (state.dirty && !window.confirm(i18n.text("Discard unsaved changes?"))) return false;
+    state.dirty = false;
+    return true;
+  }
 
   async function perform(command, onSuccess, redraw = true) {
     if (state.busy) return;
+    const savingForm = ["add_node", "import_nodes", "add_subscription", "update_subscription", "update_node", "save_routing", "save_route_rule"].includes(command.action);
+    if (redraw && state.dirty && !savingForm && !confirmLeave()) return;
     state.busy = true;
     root.setAttribute("aria-busy", "true");
     notice.textContent = i18n.text("Working…");
@@ -109,6 +120,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
       if (response.ip_info) state.ipInfo = response.ip_info;
       notice.textContent = i18n.message(response.message || "");
       if (response.merge) notice.textContent = i18n.format("{nodes} nodes · {subscriptions} subscriptions · {rules} rules · {duplicates} duplicates", response.merge);
+      if (savingForm) state.dirty = false;
       onSuccess?.(response);
       if (redraw) render();
     } catch (error) {
@@ -120,6 +132,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
   }
 
   function navigate(page) {
+    if (page !== state.page && !confirmLeave()) return;
     state.page = page;
     state.form = "";
     state.editingNode = null;
@@ -191,7 +204,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     const submit = button(state.groupEdit ? "Save group" : "Add group", null, "vq-primary");
     submit.type = "submit";
     form.append(name, submit);
-    if (state.groupEdit) form.append(button("Cancel", () => { state.groupEdit = null; state.groupName = ""; render(); }));
+    if (state.groupEdit) form.append(button("Cancel", () => { if (!confirmLeave()) return; state.groupEdit = null; state.groupName = ""; render(); }));
     form.onsubmit = event => {
       event.preventDefault();
       perform({ action: "save_node_group", id: state.groupEdit, name: state.groupName },
@@ -257,7 +270,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
       event.preventDefault();
       perform({ action: "import_nodes", content: text.value }, () => { state.form = ""; });
     };
-    form.append(button("Cancel", () => { state.form = ""; render(); }));
+    form.append(button("Cancel", () => { if (!confirmLeave()) return; state.form = ""; render(); }));
     return card("Import share links", form);
   }
 
@@ -278,7 +291,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     };
     const editor = card(subscription ? "Edit subscription" : "New subscription", form);
     editor.dataset.editor = "subscription";
-    form.append(button("Cancel", () => { state.form = ""; state.editingSubscription = null; render(); }));
+    form.append(button("Cancel", () => { if (!confirmLeave()) return; state.form = ""; state.editingSubscription = null; render(); }));
     return editor;
   }
 
@@ -322,7 +335,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     form.append(protocol, field("Name", "name", { required: true }), field("Server", "host", { required: true }),
       field("Port", "port", { value: "443", numeric: true, required: true }), credential, cipher, tls, sni, advanced);
     updateProtocol();
-    form.append(submit, button("Cancel", () => { state.form = ""; render(); }));
+    form.append(submit, button("Cancel", () => { if (!confirmLeave()) return; state.form = ""; render(); }));
     form.onsubmit = event => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(form));
@@ -341,7 +354,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     const actions = element("div", "vq-actions");
     const save = button("Save endpoint", null, "vq-primary");
     save.type = "submit";
-    actions.append(save, button("Cancel", () => { state.editingNode = null; render(); }));
+    actions.append(save, button("Cancel", () => { if (!confirmLeave()) return; state.editingNode = null; render(); }));
     form.append(field("Name", "name", { value: node.name, required: true }),
       field("Server", "host", { value: node.host, required: true }),
       field("Port", "port", { value: String(node.port), required: true, numeric: true }), actions);
@@ -356,6 +369,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
   }
 
   function openNodeEditor(id) {
+    if (!confirmLeave()) return;
     state.editingNode = id;
     state.editingSubscription = null;
     state.form = "";
@@ -367,6 +381,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     const actions = element("div", "vq-actions vq-node-actions");
     for (const [key, title] of [["share", "Import links"], ["manual", "Manual node"], ["subscription", "Add subscription"]]) {
       const item = button(title, () => {
+        if (!confirmLeave()) return;
         state.form = state.form === key ? "" : key;
         state.editingNode = null;
         state.editingSubscription = null;
@@ -432,6 +447,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
         ? i18n.format("Updated {date}", { date: new Date(item.last_updated_at * 1000).toLocaleString() }) : i18n.text("Awaiting refresh"));
       return row(item.name, `${count} · ${status}`,
         button("Edit subscription", () => {
+          if (!confirmLeave()) return;
           state.editingSubscription = item.id;
           state.editingNode = null;
           state.form = "subscription";
@@ -459,7 +475,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     const actions = element("div", "vq-actions");
     const submit = button("Save rule", null, "vq-primary");
     submit.type = "submit";
-    actions.append(submit, button("Cancel", () => { state.editingRule = undefined; render(); }));
+    actions.append(submit, button("Cancel", () => { if (!confirmLeave()) return; state.editingRule = undefined; render(); }));
     form.append(field("Match on", "kind", { choices: ruleMatches, value: rule?.kind || "domain" }),
       field("Value", "value", { value: rule?.value || "", required: true }),
       field("Action", "target", { choices: ruleTargets, value: rule?.target || "proxy" }), actions);

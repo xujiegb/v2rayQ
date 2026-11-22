@@ -307,5 +307,6 @@
   "Use a PNG or JPEG image up to 4096 × 4096": "請選擇不超過 4096 × 4096 的 PNG 或 JPEG 圖片",
   "Scan one subscription QR code at a time": "請一次辨識一個訂閱 QR 碼",
   "No supported QR code found": "未找到支援的 QR 碼",
-  "Delete {name}?": "刪除 {name}？"
+  "Delete {name}?": "刪除 {name}？",
+  "Discard unsaved changes?": "放棄尚未儲存的修改？"
 }
