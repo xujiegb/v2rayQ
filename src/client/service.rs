@@ -109,6 +109,9 @@ pub enum Command {
         id: Uuid,
         direction: RuleDirection,
     },
+    SaveTheme {
+        theme: String,
+    },
     SaveLanguage {
         language: String,
     },
@@ -427,6 +430,13 @@ fn edit_profile(data: &mut ClientData, action: Command) -> Result<&'static str, 
         Command::RemoveSubscription { id } => {
             data.remove_subscription(id);
             Ok("Subscription deleted")
+        }
+        Command::SaveTheme { theme } => {
+            if !matches!(theme.as_str(), "system" | "light" | "dark") {
+                return Err("Unsupported theme".into());
+            }
+            data.settings.theme = theme;
+            Ok("Theme saved")
         }
         Command::SaveLanguage { language } => {
             if !language.is_empty()

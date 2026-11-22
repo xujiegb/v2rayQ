@@ -11,7 +11,7 @@ install_panel() {
     mkdir -p "$dest/assets"
     install -m 0644 "frontends/cockpit/$panel.json" "$dest/manifest.json"
     sed 's/content="local"/content="cockpit"/' "frontends/web/$panel.html" > "$dest/$panel.html"
-    install -m 0644 frontends/shared/transport.mjs "$client_assets/i18n.js" "$dest/assets/"
+    install -m 0644 frontends/shared/transport.mjs "$client_assets/i18n.js" "$client_assets/appearance.js" "$dest/assets/"
     python3 tools/prepare_locales.py "$panel" "$dest/assets/locales"
     if [ "$panel" = client ]; then
         install -m 0644 "$client_assets/client.css" "$client_assets/client-ui.js" frontends/web/client-entry.mjs "$dest/assets/"

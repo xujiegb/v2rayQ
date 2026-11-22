@@ -4,7 +4,9 @@ impl ClientApp {
     pub(super) fn home(&mut self, ui: &mut egui::Ui) {
         let tr = self.translator;
         heading(ui, tr.text("Overview"));
-        ui.label(RichText::new(tr.text("Your connection, at a glance.")).color(MUTED));
+        ui.label(
+            RichText::new(tr.text("Your connection, at a glance.")).color(theme::palette(ui).muted),
+        );
         ui.add_space(12.0);
         let mut command = None;
         card(ui, |ui| {
@@ -66,7 +68,7 @@ impl ClientApp {
                     "Controls the installed host service. Node changes await the Core adapter.",
                 ))
                 .small()
-                .color(MUTED),
+                .color(theme::palette(ui).muted),
             );
         });
         if let Some(command) = command {
@@ -79,7 +81,7 @@ impl ClientApp {
             .iter()
             .find(|node| Some(node.id) == self.profile.selected_node);
         egui::Frame::new()
-            .fill(INK)
+            .fill(theme::palette(ui).hero)
             .corner_radius(18.0)
             .inner_margin(egui::Margin::same(24))
             .show(ui, |ui| {
@@ -122,17 +124,21 @@ impl ClientApp {
         ui.add_space(12.0);
         card(ui, |ui| {
             ui.strong(tr.text("Live traffic"));
-            ui.horizontal_wrapped(|ui| {
-                for (label, speed) in [
+            ui.columns(2, |columns| {
+                for (index, (label, speed)) in [
                     ("Download", self.runtime.traffic.download_bps),
                     ("Upload", self.runtime.traffic.upload_bps),
-                ] {
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let ui = &mut columns[index];
                     ui.label(tr.text(label));
                     ui.label(
                         RichText::new(speed.map_or_else(|| "—".into(), format_speed))
                             .size(25.0)
                             .strong()
-                            .color(ACCENT),
+                            .color(theme::palette(ui).accent),
                     );
                 }
             });
@@ -172,7 +178,7 @@ impl ClientApp {
             } else {
                 ui.label(tr.text("Not checked"));
             }
-            ui.label(RichText::new(tr.text("Checked on demand via IP.SB from the backend host; it may differ from the proxy exit.")).small().color(MUTED));
+            ui.label(RichText::new(tr.text("Checked on demand via IP.SB from the backend host; it may differ from the proxy exit.")).small().color(theme::palette(ui).muted));
         });
         if inspect {
             self.send(Command::InspectNetwork);

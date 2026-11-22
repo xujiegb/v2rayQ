@@ -24,6 +24,17 @@ impl ClientApp {
                             ui.selectable_value(&mut language, item.code.to_owned(), &item.name);
                         }
                     });
+                let mut appearance = self.profile.settings.theme.as_str();
+                if appearance.is_empty() { appearance = "system"; }
+                let mut selected = appearance.to_owned();
+                egui::ComboBox::from_label(tr.text("Theme"))
+                    .selected_text(tr.text(theme::label(appearance)))
+                    .show_ui(ui, |ui| {
+                        for value in ["system", "light", "dark"] {
+                            ui.selectable_value(&mut selected, value.into(), tr.text(theme::label(value)));
+                        }
+                    });
+                if selected != appearance { self.send(Command::SaveTheme { theme: selected }); }
                 if language != tr.code() {
                     self.send(Command::SaveLanguage { language });
                 }

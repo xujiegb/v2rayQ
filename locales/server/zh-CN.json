@@ -131,5 +131,11 @@
   "Disabled": "已停用",
   "Inbound name": "入站名称",
   "Node name": "节点名称",
-  "Credential": "凭据"
+  "Credential": "凭据",
+  "Theme": "主题",
+  "Follow system": "跟随系统",
+  "Light": "浅色",
+  "Dark": "深色",
+  "Theme saved": "主题已保存",
+  "Unsupported theme": "不支持的主题"
 }

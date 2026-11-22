@@ -1,3 +1,4 @@
+import { applyTheme, themeChoices } from "./appearance.js";
 import { loadLocalization } from "./i18n.js";
 
 const clientPages = [
@@ -14,6 +15,7 @@ const ruleTargets = { proxy: "Selected proxy", direct: "Direct", block: "Block" 
 const services = { tun: "TUN", transparent: "Transparent proxy" };
 
 export async function mountClient(root, send, { delegatedControl = false } = {}) {
+  applyTheme(root, "system");
   const i18n = await loadLocalization(new URL("./locales/", import.meta.url), "client");
   function element(tag, className = "", text) {
     const node = document.createElement(tag);
@@ -113,6 +115,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
       const response = await send(command);
       if (response.profile) {
         state.profile = response.profile;
+        applyTheme(root, state.profile.settings.theme);
         await i18n.use(response.profile.settings.language);
       }
       if (command.action === "set_network") state.ipInfo = null;
@@ -598,7 +601,9 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
     const authorization = delegatedControl ? "Service control uses the host session's permissions." : "On macOS, Linux and FreeBSD, graphical authorization uses SUDO_ASKPASS.";
     const language = field("Language", "language", { choices: Object.fromEntries(i18n.languages.map(item => [item.code, item.name])), value: i18n.code });
     language.lastChild.onchange = () => perform({ action: "save_language", language: language.lastChild.value });
-    return [card("Appearance", language), configurationSettings(), card("Traffic interception", ...rows, element("p", "", i18n.text(authorization)),
+    const appearance = field("Theme", "theme", { choices: themeChoices, value: state.profile.settings.theme || "system" });
+    appearance.lastChild.onchange = () => perform({ action: "save_theme", theme: appearance.lastChild.value });
+    return [card("Appearance", language, appearance), configurationSettings(), card("Traffic interception", ...rows, element("p", "", i18n.text(authorization)),
       button("Refresh service status", () => perform({ action: "status" })))];
   }
 

@@ -1,15 +1,20 @@
 use super::*;
 
 pub(super) fn heading(ui: &mut egui::Ui, value: &str) {
-    ui.heading(RichText::new(value).size(29.0).strong().color(INK));
+    ui.heading(
+        RichText::new(value)
+            .size(29.0)
+            .strong()
+            .color(theme::palette(ui).ink),
+    );
     ui.add_space(12.0);
 }
 
 pub(super) fn card(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui)) {
     egui::Frame::new()
-        .fill(Color32::WHITE)
+        .fill(theme::palette(ui).surface)
         .corner_radius(11.0)
-        .stroke(egui::Stroke::new(1.0, NAVIGATION))
+        .stroke(egui::Stroke::new(1.0, theme::palette(ui).edge))
         .inner_margin(egui::Margin::same(16))
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
@@ -19,7 +24,7 @@ pub(super) fn card(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui)) {
 }
 
 pub(super) fn form_row(ui: &mut egui::Ui, caption: &str, value: &mut String, secret: bool) {
-    ui.label(RichText::new(caption).color(MUTED));
+    ui.label(RichText::new(caption).color(theme::palette(ui).muted));
     ui.add(
         egui::TextEdit::singleline(value)
             .password(secret)

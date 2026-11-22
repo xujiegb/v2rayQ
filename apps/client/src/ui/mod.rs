@@ -25,12 +25,6 @@ mod theme;
 mod widgets;
 use widgets::{card, form_row, heading, service_label};
 
-const ACCENT: Color32 = Color32::from_rgb(80, 97, 210);
-const INK: Color32 = Color32::from_rgb(25, 38, 65);
-const MUTED: Color32 = Color32::from_rgb(81, 99, 126);
-const BACKGROUND: Color32 = Color32::from_rgb(242, 246, 252);
-const NAVIGATION: Color32 = Color32::from_rgb(230, 237, 247);
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Page {
     Home,
@@ -73,6 +67,7 @@ struct RuleEditor {
 }
 
 pub struct ClientApp {
+    applied_theme: String,
     page: Page,
     profile: Profile,
     runtime: Runtime,
@@ -112,10 +107,8 @@ impl ClientApp {
     }
 
     pub fn new_with_data_path(cc: &eframe::CreationContext<'_>, data_path: PathBuf) -> Self {
-        let mut visuals = egui::Visuals::light();
-        visuals.selection.bg_fill = Color32::from_rgb(216, 225, 254);
-        visuals.selection.stroke.color = ACCENT;
-        cc.egui_ctx.set_visuals(visuals);
+        cc.egui_ctx.set_theme(egui::ThemePreference::System);
+        theme::configure(&cc.egui_ctx);
         theme::install_font_fallback(&cc.egui_ctx);
         let (commands, requests) = mpsc::channel();
         let (responses, replies) = mpsc::channel();
@@ -146,6 +139,7 @@ impl ClientApp {
             }
         });
         let mut app = Self {
+            applied_theme: String::new(),
             page: Page::Home,
             profile: Profile::default(),
             runtime: Runtime::default(),
@@ -292,12 +286,17 @@ impl ClientApp {
                 .resizable(false)
                 .frame(
                     egui::Frame::new()
-                        .fill(NAVIGATION)
+                        .fill(theme::palette(root).navigation)
                         .inner_margin(egui::Margin::same(18)),
                 )
                 .show(root, |ui| {
                     ui.add_space(10.0);
-                    ui.label(RichText::new("◈  v2rayQ").size(25.0).strong().color(ACCENT));
+                    ui.label(
+                        RichText::new("v2rayQ")
+                            .size(25.0)
+                            .strong()
+                            .color(theme::palette(ui).accent),
+                    );
                     ui.add_space(29.0);
                     self.nav_items(ui, true);
                 });
@@ -310,11 +309,7 @@ impl ClientApp {
             .into_iter()
             .zip(CLIENT_NAV)
         {
-            let label = if vertical {
-                format!("{}   {}", item.icon, tr.text(item.title))
-            } else {
-                tr.text(item.title).into()
-            };
+            let label = tr.text(item.title);
             let button =
                 egui::Button::new(RichText::new(label).size(15.0)).selected(self.page == page);
             let response = if vertical {
@@ -336,12 +331,16 @@ impl eframe::App for ClientApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.receive();
         self.receive_scan(ui.ctx());
+        if self.applied_theme != self.profile.settings.theme {
+            theme::apply(ui.ctx(), &self.profile.settings.theme);
+            self.applied_theme = self.profile.settings.theme.to_owned();
+        }
         self.navigation(ui);
         let margin = if ui.available_width() < 520.0 { 14 } else { 26 };
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::new()
-                    .fill(BACKGROUND)
+                    .fill(theme::palette(ui).background)
                     .inner_margin(egui::Margin::same(margin)),
             )
             .show(ui, |ui| {
@@ -350,7 +349,10 @@ impl eframe::App for ClientApp {
                         ui.spinner();
                     }
                     if !self.notice.is_empty() {
-                        ui.label(RichText::new(self.translator.message(&self.notice)).color(INK));
+                        ui.label(
+                            RichText::new(self.translator.message(&self.notice))
+                                .color(theme::palette(ui).ink),
+                        );
                     }
                     match self.page {
                         Page::Home => self.home(ui),
