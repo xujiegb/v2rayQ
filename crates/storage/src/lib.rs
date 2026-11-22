@@ -7,6 +7,7 @@ use std::{
     error::Error,
     fs::{self, OpenOptions},
     path::Path,
+    time::Duration,
 };
 
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
@@ -44,7 +45,17 @@ impl Storage {
             file.set_permissions(fs::Permissions::from_mode(0o600))?;
         }
         drop(file);
-        let database = Database::create(path)?;
+        let mut retries = 0;
+        let database = loop {
+            match Database::create(path) {
+                Ok(database) => break database,
+                Err(redb::DatabaseError::DatabaseAlreadyOpen) if retries < 25 => {
+                    retries += 1;
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(error) => return Err(error.into()),
+            }
+        };
         let txn = database.begin_write()?;
         {
             let _table = txn.open_table(RECORDS)?;
@@ -72,6 +83,27 @@ impl Storage {
         }
         txn.commit()?;
         Ok(())
+    }
+
+    pub fn update<T: Serialize + DeserializeOwned, R>(
+        &self,
+        key: &str,
+        edit: impl FnOnce(Option<T>) -> StorageResult<(T, R)>,
+    ) -> StorageResult<R> {
+        let txn = self.database.begin_write()?;
+        let result = {
+            let mut table = txn.open_table(RECORDS)?;
+            let previous = table
+                .get(key)?
+                .map(|bytes| serde_json::from_slice(bytes.value()))
+                .transpose()?;
+            let (value, result) = edit(previous)?;
+            let serialized = serde_json::to_vec(&value)?;
+            table.insert(key, serialized.as_slice())?;
+            result
+        };
+        txn.commit()?;
+        Ok(result)
     }
 
     pub fn delete(&self, key: &str) -> StorageResult<bool> {
@@ -116,16 +148,34 @@ mod tests {
     #[test]
     fn persists_across_reopen_and_separates_namespaces() -> StorageResult<()> {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-        let path = std::env::temp_dir().join(format!("v2rayq-storage-{}-{stamp}.redb", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "v2rayq-storage-{}-{stamp}.redb",
+            std::process::id()
+        ));
         {
             let db = Storage::open(&path)?;
-            db.put("client/node/1", &Fixture { label: "Node".into(), count: 1 })?;
-            db.put("server/node/1", &Fixture { label: "Server".into(), count: 2 })?;
+            db.put(
+                "client/node/1",
+                &Fixture {
+                    label: "Node".into(),
+                    count: 1,
+                },
+            )?;
+            db.put(
+                "server/node/1",
+                &Fixture {
+                    label: "Server".into(),
+                    count: 2,
+                },
+            )?;
             assert_eq!(db.list::<Fixture>("client/")?.len(), 1);
         }
         {
             let db = Storage::open(&path)?;
-            assert_eq!(db.get::<Fixture>("client/node/1")?.map(|v| v.label), Some("Node".into()));
+            assert_eq!(
+                db.get::<Fixture>("client/node/1")?.map(|v| v.label),
+                Some("Node".into())
+            );
             assert!(db.delete("client/node/1")?);
             assert!(!db.delete("client/node/1")?);
             assert_eq!(db.list::<Fixture>("server/")?.len(), 1);

@@ -1,11 +1,20 @@
-//! Client-side profile management. No daemon or privileged OS operations.
+//! Client profile storage and operations shared by every frontend.
+mod manual;
+pub mod runtime;
+mod service;
+
+pub use manual::{ManualNode, ProtocolKind};
+pub use service::{Access, ClientService, Command, Profile, Reply};
 use std::{
     fs, io,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use base64::{Engine as _, engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD}};
+use base64::{
+    Engine as _,
+    engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD},
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -33,33 +42,41 @@ pub struct ClientData {
 }
 
 impl ClientData {
-    /// Reads redb state, importing a former client.json once if present.
-    /// The JSON file is retained as a backup and is never deleted on migration.
+    const KEY: &str = "client/state";
+
     pub fn load(path: &Path) -> io::Result<Self> {
-        if !path.exists() {
-            let old_path = path.with_extension("json");
-            if old_path != path && old_path.exists() {
-                let bytes = fs::read(&old_path)?;
-                let data: Self = serde_json::from_slice(&bytes)
-                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-                data.save(path)?;
-                return Ok(data);
-            }
-            return Ok(Self::default());
-        }
         let database = v2rayq_storage::Storage::open(path).map_err(io::Error::other)?;
-        Ok(database.get("client/state").map_err(io::Error::other)?.unwrap_or_default())
+        if let Some(data) = database.get(Self::KEY).map_err(io::Error::other)? {
+            return Ok(data);
+        }
+        let data = Self::load_legacy(path)?;
+        if let Some(data) = data {
+            database.put(Self::KEY, &data).map_err(io::Error::other)?;
+            return Ok(data);
+        }
+        Ok(Self::default())
     }
 
-    /// Stores a single atomic versioned document in an ACID redb transaction.
-    pub fn save(&self, path: &Path) -> io::Result<()> {
-        let database = v2rayq_storage::Storage::open(path).map_err(io::Error::other)?;
-        database.put("client/state", self).map_err(io::Error::other)
+    fn load_legacy(path: &Path) -> io::Result<Option<Self>> {
+        let old_path = path.with_extension("json");
+        if old_path == path {
+            return Ok(None);
+        }
+        match fs::read(old_path) {
+            Ok(bytes) => serde_json::from_slice(&bytes)
+                .map(Some)
+                .map_err(io::Error::other),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error),
+        }
     }
 
     pub fn add_node(&mut self, node: Node) {
         self.selected_node = Some(node.id);
-        self.nodes.push(SavedNode { node, subscription_id: None });
+        self.nodes.push(SavedNode {
+            node,
+            subscription_id: None,
+        });
     }
 
     pub fn add_share_link(&mut self, link: &str) -> Result<(), String> {
@@ -77,14 +94,21 @@ impl ClientData {
 
     pub fn add_subscription(&mut self, name: &str, link: &str) -> Result<Uuid, String> {
         let url = url::Url::parse(link.trim()).map_err(|error| error.to_string())?;
-        if url.scheme() != "https" || url.host_str().is_none()
-            || !url.username().is_empty() || url.password().is_some() {
+        if url.scheme() != "https"
+            || url.host_str().is_none()
+            || !url.username().is_empty()
+            || url.password().is_some()
+        {
             return Err("Subscription requires an HTTPS URL without embedded credentials".into());
         }
         if name.trim().is_empty() {
             return Err("Subscription name cannot be empty".into());
         }
-        if self.subscriptions.iter().any(|item| item.url == url.as_str()) {
+        if self
+            .subscriptions
+            .iter()
+            .any(|item| item.url == url.as_str())
+        {
             return Err("Subscription already exists".into());
         }
         let subscription = Subscription::new(name.trim(), url.as_str());
@@ -96,8 +120,10 @@ impl ClientData {
     pub fn remove_subscription(&mut self, id: Uuid) {
         self.subscriptions.retain(|entry| entry.id != id);
         self.nodes.retain(|entry| entry.subscription_id != Some(id));
-        if self.selected_node.is_some_and(|selected|
-            !self.nodes.iter().any(|entry| entry.node.id == selected)) {
+        if self
+            .selected_node
+            .is_some_and(|selected| !self.nodes.iter().any(|entry| entry.node.id == selected))
+        {
             self.selected_node = self.nodes.first().map(|entry| entry.node.id);
         }
     }
@@ -108,7 +134,14 @@ impl ClientData {
         if !self.subscriptions.iter().any(|entry| entry.id == id) {
             return Err("Subscription not found".into());
         }
-        let parsed = parse_subscription(content)?;
+        let mut parsed = parse_subscription(content)?;
+        if let Some(selected) = self.nodes.iter().find(|entry| {
+            entry.subscription_id == Some(id) && Some(entry.node.id) == self.selected_node
+        }) && let Some(replacement) = parsed.iter_mut().find(|node| {
+            node.endpoint == selected.node.endpoint && node.protocol == selected.node.protocol
+        }) {
+            replacement.id = selected.node.id;
+        }
         let count = parsed.len();
         self.nodes.retain(|entry| entry.subscription_id != Some(id));
         self.nodes.extend(parsed.into_iter().map(|node| SavedNode {
@@ -117,12 +150,15 @@ impl ClientData {
         }));
         if let Some(subscription) = self.subscriptions.iter_mut().find(|entry| entry.id == id) {
             subscription.last_updated_at = SystemTime::now()
-                .duration_since(UNIX_EPOCH).ok()
+                .duration_since(UNIX_EPOCH)
+                .ok()
                 .and_then(|duration| i64::try_from(duration.as_secs()).ok());
             subscription.last_error = None;
         }
-        if self.selected_node.is_none_or(|selected|
-            !self.nodes.iter().any(|entry| entry.node.id == selected)) {
+        if self
+            .selected_node
+            .is_none_or(|selected| !self.nodes.iter().any(|entry| entry.node.id == selected))
+        {
             self.selected_node = self.nodes.first().map(|entry| entry.node.id);
         }
         Ok(count)
@@ -136,20 +172,29 @@ impl ClientData {
 }
 
 pub fn default_data_path() -> PathBuf {
+    if let Some(path) = std::env::var_os("V2RAYQ_CLIENT_DB") {
+        return PathBuf::from(path);
+    }
     #[cfg(target_os = "windows")]
     if let Some(dir) = std::env::var_os("APPDATA") {
         return PathBuf::from(dir).join("v2rayQ").join("client.redb");
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     if let Some(home) = std::env::var_os("HOME") {
-        return PathBuf::from(home).join("Library").join("Application Support")
-            .join("v2rayQ").join("client.redb");
+        return PathBuf::from(home)
+            .join("Library")
+            .join("Application Support")
+            .join("v2rayQ")
+            .join("client.redb");
     }
     if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
         return PathBuf::from(dir).join("v2rayQ").join("client.redb");
     }
     if let Some(home) = std::env::var_os("HOME") {
-        return PathBuf::from(home).join(".config").join("v2rayQ").join("client.redb");
+        return PathBuf::from(home)
+            .join(".config")
+            .join("v2rayQ")
+            .join("client.redb");
     }
     PathBuf::from("v2rayQ-client.redb")
 }
@@ -186,7 +231,8 @@ pub fn parse_subscription(input: &str) -> Result<Vec<Node>, String> {
 }
 
 fn parse_lines(input: &str) -> Vec<Node> {
-    input.lines()
+    input
+        .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .filter_map(|line| parser::parse(line).ok())
@@ -212,16 +258,34 @@ mod tests {
     #[test]
     fn keeps_nodes_on_failed_refresh() {
         let mut state = ClientData::default();
-        let id = state.add_subscription("Sample", "https://example.org/sub").unwrap();
+        let id = state
+            .add_subscription("Sample", "https://example.org/sub")
+            .unwrap();
         assert!(state.apply_subscription(id, SHARE).is_ok());
         assert!(state.apply_subscription(id, "invalid").is_err());
         assert_eq!(state.nodes.len(), 1);
     }
 
     #[test]
+    fn refresh_preserves_the_selected_endpoint() -> Result<(), String> {
+        let mut state = ClientData::default();
+        let id = state.add_subscription("Sample", "https://example.org/sub")?;
+        state.apply_subscription(id, SHARE)?;
+        let active = state.selected_node;
+        assert!(active.is_some());
+        let renamed = "trojan://password@example.org:443?security=tls#New%20name";
+        state.apply_subscription(id, renamed)?;
+        assert_eq!(state.selected_node, active);
+        assert_eq!(state.nodes[0].node.name, "New name");
+        Ok(())
+    }
+
+    #[test]
     fn deleting_a_subscription_only_removes_its_nodes() {
         let mut state = ClientData::default();
-        let id = state.add_subscription("Sample", "https://example.org/sub").unwrap();
+        let id = state
+            .add_subscription("Sample", "https://example.org/sub")
+            .unwrap();
         assert!(state.apply_subscription(id, SHARE).is_ok());
         state.add_share_link(SHARE).unwrap();
         state.remove_subscription(id);

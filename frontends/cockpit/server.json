@@ -1,0 +1,4 @@
+{
+  "version": 0,
+  "tools": { "v2rayq-server": { "label": "v2rayQ Server", "path": "server.html" } }
+}

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Reject accidental UI/server coupling or the former large SQL runtime."""
 from pathlib import Path
-import sys
 import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,7 +27,7 @@ def require(condition, message):
 root = manifest(".")
 workspace = set(root["workspace"]["members"])
 required = {
-    "apps/client", "apps/server", "apps/web-client",
+    "apps/client", "apps/cli", "apps/server", "apps/web-client",
     "crates/contracts", "crates/http-preview", "crates/storage",
 }
 require(required <= workspace, "Missing independent app or shared crate")
@@ -42,8 +41,11 @@ for app in ["apps/server", "apps/web-client"]:
     deps = dependencies(app)
     require("eframe" not in deps and "egui" not in deps and "wgpu" not in deps,
             f"{app}: native graphics dependencies forbidden")
-    require("v2rayQ" not in deps and "v2rayq-client" not in deps,
-            f"{app}: client domain must not leak into HTTP host")
+    require("v2rayq-client" not in deps, f"{app}: native app coupling forbidden")
+require("v2rayQ" not in dependencies("apps/server"), "Server must stay independent from the client domain")
+for app in ["apps/cli", "apps/client", "apps/web-client"]:
+    require("v2rayQ" in dependencies(app), f"{app}: shared client domain missing")
+    require("v2rayq-server" not in dependencies(app), f"{app}: server coupling forbidden")
 
 require("v2rayq-http-preview" in dependencies("apps/server"), "Server HTTP host missing")
 require("v2rayq-http-preview" in dependencies("apps/web-client"), "Web HTTP host missing")

@@ -8,3 +8,5 @@ license.workspace = true
 [dependencies]
 v2rayq-contracts = { path = "../../crates/contracts" }
 v2rayq-http-preview = { path = "../../crates/http-preview" }
+serde_json = "1"
+v2rayQ = { path = "../.." }

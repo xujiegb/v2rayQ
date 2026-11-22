@@ -2,6 +2,7 @@
   "admin/services/v2rayq": {
     "title": "v2rayQ",
     "order": 55,
+    "depends": { "acl": ["luci-app-v2rayq"] },
     "action": {"type": "view", "path": "v2rayq/client"}
   }
 }
