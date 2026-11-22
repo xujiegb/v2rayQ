@@ -2,6 +2,7 @@ name: Native binaries
 
 on:
   workflow_dispatch:
+  pull_request:
   push:
     tags: ['v*']
 
@@ -36,11 +37,13 @@ jobs:
           foreach ($app in @('client', 'web-client', 'server')) {
             Compress-Archive -Path "target/release/v2rayq-$app.exe" -DestinationPath "dist/v2rayq-$app-Windows-x64.zip"
           }
-      - uses: actions/upload-artifact@v4
+      - name: Upload separate application artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: v2rayq-${{ runner.os }}-${{ runner.arch }}
           path: dist/*
           if-no-files-found: error
+          retention-days: 14
 
   freebsd:
     runs-on: ubuntu-latest
@@ -62,3 +65,4 @@ jobs:
           name: v2rayq-FreeBSD-amd64
           path: dist/*.tar.gz
           if-no-files-found: error
+          retention-days: 14
