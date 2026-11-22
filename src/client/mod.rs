@@ -48,12 +48,26 @@ impl ClientData {
         }
         let bytes = serde_json::to_vec_pretty(self).map_err(io::Error::other)?;
         let tmp = path.with_extension("json.tmp");
-        fs::write(&tmp, bytes)?;
-        // On Windows rename cannot replace an existing file. Keep the original on
-        // failure rather than deleting it before a replacement is durable.
-        if fs::rename(&tmp, path).is_err() {
-            fs::copy(&tmp, path)?;
-            fs::remove_file(&tmp)?;
+        let mut file = fs::OpenOptions::new()
+            .write(true).create(true).truncate(true).open(&tmp)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // Store proxy secrets in a file accessible only by this user.
+            file.set_permissions(fs::Permissions::from_mode(0o600))?;
+        }
+        std::io::Write::write_all(&mut file, &bytes)?;
+        file.sync_all()?;
+        drop(file);
+        #[cfg(not(windows))]
+        fs::rename(&tmp, path)?;
+        #[cfg(windows)]
+        {
+            // Windows cannot always atomically replace an existing file.
+            if fs::rename(&tmp, path).is_err() {
+                fs::copy(&tmp, path)?;
+                fs::remove_file(&tmp)?;
+            }
         }
         Ok(())
     }
@@ -158,7 +172,8 @@ pub fn parse_subscription(input: &str) -> Result<Vec<Node>, String> {
     }
     let mut nodes = parse_lines(input);
     if nodes.is_empty() {
-        let encoded = input.trim();
+        // Subscription providers sometimes wrap base64 payloads at fixed columns.
+        let encoded: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
         for engine in [STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD] {
             if let Ok(bytes) = engine.decode(encoded)
                 && bytes.len() <= MAX_SUBSCRIPTION_BYTES
