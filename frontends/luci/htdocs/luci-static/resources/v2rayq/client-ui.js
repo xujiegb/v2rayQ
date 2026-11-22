@@ -132,7 +132,7 @@ export async function mountClient(root, send, { delegatedControl = false } = {})
   }
 
   function navigate(page) {
-    if (page !== state.page && !confirmLeave()) return;
+    if (!confirmLeave()) return;
     state.page = page;
     state.form = "";
     state.editingNode = null;

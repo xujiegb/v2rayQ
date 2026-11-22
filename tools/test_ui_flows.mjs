@@ -75,6 +75,9 @@ try {
   await page.getByLabel("Server", { exact: true }).fill("example.org");
   await page.getByLabel("Password", { exact: true }).fill("test-secret");
   page.once("dialog", dialog => dialog.dismiss());
+  await page.getByRole("button", { name: "Nodes", exact: true }).click();
+  assert.equal(await page.getByLabel("Name", { exact: true }).inputValue(), "Example node");
+  page.once("dialog", dialog => dialog.dismiss());
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   assert.equal(await page.getByLabel("Name", { exact: true }).inputValue(), "Example node");
   await page.getByRole("button", { name: "Save node", exact: true }).click();

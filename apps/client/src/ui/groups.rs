@@ -128,10 +128,11 @@ pub(super) fn matches_filter(filter: &str, node: &v2rayQ::client::NodeSummary) -
         "local" => node.subscription_id.is_none(),
         "subscriptions" => node.subscription_id.is_some(),
         value => {
-            node.group_id.is_some_and(|id| id.to_string() == value)
-                || node
-                    .subscription_id
-                    .is_some_and(|id| format!("subscription:{id}") == value)
+            Uuid::parse_str(value).is_ok_and(|id| node.group_id == Some(id))
+                || value
+                    .strip_prefix("subscription:")
+                    .and_then(|value| Uuid::parse_str(value).ok())
+                    .is_some_and(|id| node.subscription_id == Some(id))
         }
     }
 }
