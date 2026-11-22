@@ -38,15 +38,15 @@ pub enum VmessParseError {
     UnsupportedSecurity(String),
     #[error("unsupported gRPC mode: {0}")]
     UnsupportedGrpcMode(String),
-    #[error("gRPC authority is not supported by sing-box")]
+    #[error("gRPC authority is not supported by the current node profile")]
     UnsupportedGrpcAuthority,
     #[error("missing REALITY public key")]
     MissingRealityPublicKey,
     #[error("missing REALITY fingerprint")]
     MissingRealityFingerprint,
-    #[error("certificate pinning from this share link is not supported by sing-box 1.14")]
+    #[error("certificate pinning is not supported by the current node profile")]
     UnsupportedCertificatePin,
-    #[error("separate certificate verification name is not supported by sing-box")]
+    #[error("a separate certificate verification name is not supported by the current node profile")]
     UnsupportedVerifyName,
 }
 

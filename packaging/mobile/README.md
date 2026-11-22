@@ -1,49 +1,27 @@
-# Android and iOS native egui integration
+# Native mobile egui
 
-The UI implementation is `apps/client/src/ui`. It is written in Rust and uses egui/eframe directly;
-there is no embedded browser or WebView.
-
-The library exposes two safe entry points:
-
-- `v2rayq_client::ClientApp::new_with_data_path(cc, sandbox_path)`
-- `v2rayq_client::run_with_native_options_and_data_path(options, sandbox_path)`
-
-Both allow mobile launchers to pass a writable application-private configuration directory.
-The app UI and node parsers are shared with the Windows/Linux/macOS/FreeBSD client.
-
-## Android
-
-```sh
-rustup target add aarch64-linux-android
-cargo check -p v2rayq-client --lib --no-default-features --target aarch64-linux-android
-```
-
-This is a Rust UI library check, **not an installable APK**. A real Android Activity
-needs `android-native-activity`, an NDK-generated `cdylib`, Gradle/Android resources,
-signing and a native exported Rust entry point. Android Activity requires an unmangled
-`android_main` symbol; Rust 2024 demands the `#[unsafe(no_mangle)]` attribute for
-this symbol. This project deliberately does not add the attribute while the strict
-first-party no-unsafe-source policy applies. Do not ship an empty APK or silently
-replace egui with a WebView. Agree on a narrowly audited bootstrap boundary before
-completing packaging.
+Mobile and desktop share the same Rust widgets, profile commands and storage. A native host can pass an explicit sandbox database path to `v2rayq_client::run_with_native_options_and_data_path`.
 
 ## iOS
 
+On macOS with Xcode, build the arm64 simulator app bundle with these commands.
+
 ```sh
-rustup target add aarch64-apple-ios
-cargo check -p v2rayq-client --lib --no-default-features --target aarch64-apple-ios
+rustup target add aarch64-apple-ios-sim
+sh packaging/mobile/ios/build.sh aarch64-apple-ios-sim
+xcrun simctl install booted dist/aarch64-apple-ios-sim/v2rayQ.app
+xcrun simctl launch booted org.v2rayq.client
 ```
 
-Requires macOS/Xcode to build and codesign an actual iOS application, plus a native
-UIKit or SwiftUI window/bootstrap hosting the Rust egui renderer. This is **not**
-the same as displaying the independent HTML Web client. Do not claim an IPA until
-the Xcode shell, device lifecycle, keyboard/input handling, sandbox paths and
-signing are implemented and tested.
+`aarch64-apple-ios` builds an unsigned device bundle. Installing it on a physical device requires Apple's signing and provisioning. The build uses winit's iOS lifecycle and the shared egui/WGPU renderer. The simulator bundle is built by the iOS job. Device signing, distribution and mobile VPN integration are pending.
 
-## Notes
+## Android
 
-- Desktop and mobile share page controllers, form validation, subscription parsing
-  and Core contracts.
-- Mobile browsers are not the UI engine.
-- Native Apple/Android lifecycle glue and TUN permissions are platform-specific.
-- TUN cannot be activated by current UI switches; Core remains unavailable.
+With the Android NDK Clang configured for the target, build-check the shared Rust UI library with these commands.
+
+```sh
+rustup target add aarch64-linux-android
+cargo check --locked -p v2rayq-client --lib --no-default-features --target aarch64-linux-android
+```
+
+The `android-activity` backend needs an exported unmangled `android_main` entry point. Rust 2024 treats the export attribute as an unsafe declaration. Installable APK packaging requires a launcher compatible with the project's first-party Rust restrictions. Android VPN authorization and integration are pending.

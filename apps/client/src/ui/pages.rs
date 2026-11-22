@@ -2,200 +2,360 @@ use super::*;
 
 impl ClientApp {
     pub(super) fn home(&mut self, ui: &mut egui::Ui) {
-        ui.heading(RichText::new("Overview").size(29.0).color(INK));
-        ui.label(RichText::new("Your connection at a glance").color(MUTED));
-        ui.add_space(20.0);
-        if ui.available_width() < 650.0 {
-            metric(ui, "ENGINE", "Not connected", "Waiting for Core");
-            metric(ui, "NODES", &self.data.nodes.len().to_string(), "Saved locally");
-            metric(ui, "SUBSCRIPTIONS", &self.data.subscriptions.len().to_string(), "HTTPS imports");
-        } else {
-            ui.columns(3, |columns| {
-                metric(&mut columns[0], "ENGINE", "Not connected", "Waiting for Core");
-                metric(&mut columns[1], "NODES", &self.data.nodes.len().to_string(), "Saved locally");
-                metric(&mut columns[2], "SUBSCRIPTIONS", &self.data.subscriptions.len().to_string(), "HTTPS imports");
+        heading(ui, "Overview");
+        let selected = self
+            .profile
+            .nodes
+            .iter()
+            .find(|node| Some(node.id) == self.profile.selected_node);
+        egui::Frame::new()
+            .fill(INK)
+            .corner_radius(14.0)
+            .inner_margin(egui::Margin::same(22))
+            .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.label(RichText::new("Selected node").color(Color32::from_rgb(179, 195, 227)));
+                ui.label(
+                    RichText::new(selected.map_or("Choose a node", |node| &node.name))
+                        .size(25.0)
+                        .strong()
+                        .color(Color32::WHITE),
+                );
+                if let Some(node) = selected {
+                    ui.label(
+                        RichText::new(format!(
+                            "{}  ·  {}:{}",
+                            node.protocol.label(),
+                            node.host,
+                            node.port
+                        ))
+                        .color(Color32::LIGHT_GRAY),
+                    );
+                }
             });
-        }
-        ui.add_space(23.0);
-        section(ui, "Connection");
-        ui.group(|ui| {
-            ui.set_min_width(ui.available_width() - 20.0);
-            ui.label(RichText::new("No live traffic yet").size(19.0).strong().color(INK));
-            ui.label(RichText::new("The external Core API is not available. No traffic, latency, or tunnel status is fabricated.").color(MUTED));
-            ui.add_space(8.0);
-            if ui.button("Manage nodes").clicked() {
-                self.page = Page::Nodes;
+        ui.add_space(12.0);
+        card(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(format!("{} nodes", self.profile.nodes.len()));
+                ui.label(format!(
+                    "{} subscriptions",
+                    self.profile.subscriptions.len()
+                ));
+                if ui.button("Manage nodes").clicked() {
+                    self.page = Page::Nodes;
+                }
+                if ui.button("Reload profile").clicked() && self.pending == 0 {
+                    self.send(Command::Profile);
+                }
+            });
+        });
+        card(ui, |ui| {
+            ui.strong("Network services");
+            ui.label(format!("TUN  ·  {}", service_label(&self.runtime.tun)));
+            ui.label(format!(
+                "Transparent proxy  ·  {}",
+                service_label(&self.runtime.transparent)
+            ));
+        });
+    }
+
+    pub(super) fn nodes(&mut self, ui: &mut egui::Ui) {
+        heading(ui, "Nodes");
+        ui.horizontal_wrapped(|ui| {
+            for (form, name) in [
+                (NodeForm::Share, "Import link"),
+                (NodeForm::Manual, "Manual node"),
+                (NodeForm::Subscription, "Add subscription"),
+            ] {
+                if ui.selectable_label(self.form == form, name).clicked() {
+                    self.form = if self.form == form {
+                        NodeForm::None
+                    } else {
+                        form
+                    };
+                }
+            }
+        });
+        ui.add_space(8.0);
+        ui.add_enabled_ui(self.pending == 0, |ui| {
+            match self.form {
+                NodeForm::Share => card(ui, |ui| {
+                    form_row(ui, "Share URI", &mut self.share_link, true);
+                    if ui.button("Import node").clicked() {
+                        let link = self.share_link.to_owned();
+                        self.send(Command::AddLink { link });
+                    }
+                }),
+                NodeForm::Subscription => card(ui, |ui| {
+                    form_row(ui, "Name", &mut self.subscription_name, false);
+                    form_row(ui, "HTTPS URL", &mut self.subscription_url, true);
+                    if ui.button("Add and refresh").clicked() {
+                        let name = self.subscription_name.to_owned();
+                        let url = self.subscription_url.to_owned();
+                        self.send(Command::AddSubscription { name, url });
+                    }
+                }),
+                NodeForm::Manual => card(ui, |ui| self.manual_node(ui)),
+                NodeForm::None => {}
+            }
+            let mut action = None;
+            card(ui, |ui| {
+                ui.strong("Saved nodes");
+                if self.profile.nodes.is_empty() {
+                    ui.label("No nodes saved.");
+                }
+                const PAGE_SIZE: usize = 30;
+                if ui
+                    .add(
+                        egui::TextEdit::singleline(&mut self.query)
+                            .hint_text("Search name, address or protocol"),
+                    )
+                    .changed()
+                {
+                    self.node_page = 0;
+                }
+                let needle = self.query.trim().to_lowercase();
+                let matches = |node: &&v2rayQ::client::NodeSummary| {
+                    needle.is_empty()
+                        || node.name.to_lowercase().contains(&needle)
+                        || node.host.to_lowercase().contains(&needle)
+                        || node.protocol.label().to_lowercase().contains(&needle)
+                };
+                let filtered = self.profile.nodes.iter().filter(matches);
+                let count = self.profile.nodes.iter().filter(matches).count();
+                self.node_page = self.node_page.min(count.saturating_sub(1) / PAGE_SIZE);
+                if count == 0 && !needle.is_empty() {
+                    ui.label("No matching nodes.");
+                }
+                for node in filtered.skip(self.node_page * PAGE_SIZE).take(PAGE_SIZE) {
+                    ui.separator();
+                    ui.horizontal_wrapped(|ui| {
+                        if ui
+                            .selectable_label(
+                                Some(node.id) == self.profile.selected_node,
+                                &node.name,
+                            )
+                            .clicked()
+                        {
+                            action = Some(Command::SelectNode { id: node.id });
+                        }
+                        ui.label(
+                            RichText::new(format!(
+                                "{}  ·  {}:{}",
+                                node.protocol.label(),
+                                node.host,
+                                node.port
+                            ))
+                            .color(MUTED),
+                        );
+                        if ui.small_button("Delete").clicked() {
+                            action = Some(Command::RemoveNode { id: node.id });
+                        }
+                    });
+                }
+                if count > PAGE_SIZE {
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add_enabled(self.node_page > 0, egui::Button::new("Previous"))
+                            .clicked()
+                        {
+                            self.node_page -= 1;
+                        }
+                        ui.label(format!(
+                            "{} / {}",
+                            self.node_page + 1,
+                            count.div_ceil(PAGE_SIZE)
+                        ));
+                        if ui
+                            .add_enabled(
+                                self.node_page + 1 < count.div_ceil(PAGE_SIZE),
+                                egui::Button::new("Next"),
+                            )
+                            .clicked()
+                        {
+                            self.node_page += 1;
+                        }
+                    });
+                }
+            });
+            card(ui, |ui| {
+                ui.strong("Subscriptions");
+                if self.profile.subscriptions.is_empty() {
+                    ui.label("No subscriptions saved.");
+                }
+                for (index, item) in self.profile.subscriptions.iter().enumerate() {
+                    ui.separator();
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(&item.name);
+                        if let Some(error) = &item.last_error {
+                            ui.label(error);
+                        }
+                        if ui.small_button("Refresh").clicked() {
+                            action = Some(Command::RefreshSubscription { id: item.id });
+                        }
+                        if self.confirm_subscription == Some(index) {
+                            if ui.small_button("Delete subscription and nodes").clicked() {
+                                action = Some(Command::RemoveSubscription { id: item.id });
+                                self.confirm_subscription = None;
+                            }
+                            if ui.small_button("Cancel").clicked() {
+                                self.confirm_subscription = None;
+                            }
+                        } else if ui.small_button("Delete").clicked() {
+                            self.confirm_subscription = Some(index);
+                        }
+                    });
+                }
+            });
+            if let Some(action) = action {
+                self.send(action);
             }
         });
     }
 
-    pub(super) fn nodes(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.horizontal_wrapped(|ui| {
-            ui.heading(RichText::new("Nodes").size(29.0).color(INK));
-            ui.add_space(18.0);
-            if ui.button("＋ Share link").clicked() { self.add_link = !self.add_link; self.add_manual = false; }
-            if ui.button("＋ Manual node").clicked() { self.add_manual = !self.add_manual; self.add_link = false; }
-        });
-        ui.label(RichText::new("Import or configure proxy endpoints").color(MUTED));
-        ui.add_space(14.0);
-        if self.add_link {
-            ui.group(|ui| {
-                ui.label("Share URI");
-                ui.text_edit_singleline(&mut self.share_link);
-                if ui.button("Import node").clicked() {
-                    match self.data.add_share_link(&self.share_link) {
-                        Ok(()) => { self.notice = "Node added".into(); self.share_link.clear(); self.add_link = false; self.save(); }
-                        Err(error) => self.notice = error,
-                    }
+    fn manual_node(&mut self, ui: &mut egui::Ui) {
+        let node = &mut self.manual;
+        egui::ComboBox::from_label("Protocol")
+            .selected_text(node.protocol.label())
+            .show_ui(ui, |ui| {
+                for protocol in ProtocolKind::ALL {
+                    ui.selectable_value(&mut node.protocol, protocol, protocol.label());
                 }
             });
-            ui.add_space(10.0);
+        form_row(ui, "Name", &mut node.name, false);
+        form_row(ui, "Server", &mut node.host, false);
+        form_row(ui, "Port", &mut node.port, false);
+        let credential = if node.protocol.uses_uuid() {
+            "UUID"
+        } else {
+            "Password"
+        };
+        form_row(ui, credential, &mut node.credential, true);
+        if node.protocol == ProtocolKind::Shadowsocks {
+            form_row(ui, "Cipher", &mut node.method, false);
+        } else {
+            if node.protocol.uses_uuid() {
+                ui.checkbox(&mut node.tls, "TLS");
+            }
+            if !node.protocol.uses_uuid() || node.tls {
+                form_row(ui, "TLS server name", &mut node.server_name, false);
+            }
         }
-        if self.add_manual {
-            ui.group(|ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Protocol");
-                    egui::ComboBox::from_id_salt("protocol")
-                        .selected_text(["VLESS", "VMess", "Trojan", "Shadowsocks", "AnyTLS", "Hysteria2"][self.manual.protocol])
+        if node.protocol != ProtocolKind::Shadowsocks {
+            ui.collapsing("Advanced connection options", |ui| {
+                if node.protocol.supports_transport() {
+                    egui::ComboBox::from_label("Transport")
+                        .selected_text(node.transport.label())
                         .show_ui(ui, |ui| {
-                            for (index, name) in ["VLESS", "VMess", "Trojan", "Shadowsocks", "AnyTLS", "Hysteria2"].iter().enumerate() {
-                                ui.selectable_value(&mut self.manual.protocol, index, *name);
+                            for transport in ManualTransport::ALL {
+                                ui.selectable_value(
+                                    &mut node.transport,
+                                    transport,
+                                    transport.label(),
+                                );
                             }
                         });
-                });
-                form_row(ui, "Name", &mut self.manual.name);
-                form_row(ui, "Server", &mut self.manual.host);
-                form_row(ui, "Port", &mut self.manual.port);
-                ui.label("UUID / password");
-                ui.add(egui::TextEdit::singleline(&mut self.manual.credential)
-                    .password(true)
-                    .desired_width(ui.available_width().min(500.0)));
-                if self.manual.protocol == 3 {
-                    form_row(ui, "Cipher", &mut self.manual.method);
-                }
-                if self.manual.protocol != 3 {
-                    form_row(ui, "TLS server name (optional)", &mut self.manual.server_name);
-                }
-                if ui.button("Save node").clicked() {
-                    match self.manual.create() {
-                        Ok(node) => {
-                            self.data.add_node(node);
-                            self.notice = "Node saved".into();
-                            self.add_manual = false;
-                            self.manual = ManualForm {
-                                port: "443".to_owned(),
-                                method: "aes-128-gcm".to_owned(),
-                                ..Default::default()
-                            };
-                            self.save();
+                    match node.transport {
+                        ManualTransport::Tcp => {}
+                        ManualTransport::Grpc => {
+                            form_row(ui, "gRPC service name", &mut node.service_name, false)
                         }
-                        Err(error) => self.notice = error,
-                    }
-                }
-            });
-            ui.add_space(12.0);
-        }
-        section(ui, "Saved nodes");
-        let mut remove = None;
-        let mut select = None;
-        egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
-            if self.data.nodes.is_empty() { ui.label("No nodes yet. Import a link or add one manually."); }
-            for entry in &self.data.nodes {
-                ui.horizontal_wrapped(|ui| {
-                    let picked = self.data.selected_node == Some(entry.node.id);
-                    if ui.selectable_label(picked, format!("{}   ·   {}", entry.node.name, protocol_name(&entry.node.protocol))).clicked() {
-                        select = Some(entry.node.id);
-                    }
-                    ui.label(RichText::new(format!("{}:{}", entry.node.endpoint.host, entry.node.endpoint.port)).color(MUTED));
-                    if ui.small_button("Delete").clicked() { remove = Some(entry.node.id); }
-                });
-                ui.separator();
-            }
-        });
-        if let Some(id) = select { self.data.selected_node = Some(id); self.save(); }
-        if let Some(id) = remove { self.data.remove_node(id); self.save(); }
-        ui.add_space(15.0);
-        ui.horizontal_wrapped(|ui| {
-            section(ui, "Subscriptions");
-            if ui.button("＋ Add subscription").clicked() {
-                self.add_subscription = !self.add_subscription;
-            }
-        });
-        if self.add_subscription {
-            ui.group(|ui| {
-                form_row(ui, "Name", &mut self.subscription_name);
-                form_row(ui, "HTTPS URL", &mut self.subscription_url);
-                if ui.button("Add and update").clicked() {
-                    match self.data.add_subscription(&self.subscription_name, &self.subscription_url) {
-                        Ok(id) => {
-                            self.add_subscription = false;
-                            self.subscription_name.clear();
-                            self.subscription_url.clear();
-                            self.save();
-                            self.fetch_subscription(id, ctx);
+                        _ => {
+                            form_row(ui, "Transport path", &mut node.transport_path, false);
+                            form_row(ui, "Transport host", &mut node.transport_host, false);
                         }
-                        Err(error) => self.notice = error,
                     }
+                }
+                if !node.protocol.uses_uuid() || node.tls {
+                    form_row(ui, "ALPN (comma separated)", &mut node.alpn, false);
                 }
             });
         }
-        let mut refresh = None;
-        let mut remove_sub = None;
-        for subscription in &self.data.subscriptions {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new(&subscription.name).strong().color(INK));
-                ui.label(RichText::new(
-                    subscription.last_error.as_deref().unwrap_or("Ready"))
-                    .small().color(if subscription.last_error.is_some() { Color32::DARK_RED } else { MUTED }));
-                if ui.small_button("Refresh").clicked() { refresh = Some(subscription.id); }
-                if ui.small_button("Delete").clicked() { remove_sub = Some(subscription.id); }
-            });
+        if ui.button("Save node").clicked() {
+            match self.manual.create() {
+                Ok(_) => {
+                    let node = std::mem::take(&mut self.manual);
+                    self.send(Command::AddNode { node });
+                }
+                Err(error) => self.notice = error,
+            }
         }
-        if let Some(id) = remove_sub { self.data.remove_subscription(id); self.save(); }
-        if let Some(id) = refresh { self.fetch_subscription(id, ctx); }
     }
 
     pub(super) fn routing(&mut self, ui: &mut egui::Ui) {
-        ui.heading(RichText::new("Routing").size(29.0).color(INK));
-        ui.label(RichText::new("Choose how traffic should be handled after the Core is connected.").color(MUTED));
-        ui.add_space(18.0);
-        section(ui, "Outbound policy");
-        let mut changed = false;
-        ui.horizontal_wrapped(|ui| {
-            changed |= ui.selectable_value(&mut self.data.settings.route_mode, RouteMode::Direct, "Direct").changed();
-            changed |= ui.selectable_value(&mut self.data.settings.route_mode, RouteMode::Global, "Global").changed();
-            changed |= ui.selectable_value(&mut self.data.settings.route_mode, RouteMode::Rules, "Rule-based").changed();
+        heading(ui, "Routing");
+        card(ui, |ui| {
+            ui.label(
+                "Saved to your client profile. Applies once the Core supports these controls.",
+            );
+            let Some((mode, dns)) = self.routing.as_mut() else {
+                return;
+            };
+            ui.horizontal_wrapped(|ui| {
+                ui.selectable_value(mode, RouteMode::Direct, "Direct");
+                ui.selectable_value(mode, RouteMode::Global, "Global");
+                ui.selectable_value(mode, RouteMode::Rules, "Rule-based");
+            });
+            form_row(ui, "DNS resolver", dns, false);
+            if ui
+                .add_enabled(self.pending == 0, egui::Button::new("Save routing"))
+                .clicked()
+            {
+                let command = Command::SaveRouting {
+                    route_mode: *mode,
+                    dns_server: dns.to_owned(),
+                };
+                self.send(command);
+            }
         });
-        ui.add_space(13.0);
-        section(ui, "DNS");
-        changed |= ui.text_edit_singleline(&mut self.data.settings.dns_server).changed();
-        ui.label(RichText::new("Values are saved locally; no network configuration has been changed.").small().color(MUTED));
-        if changed { self.save(); }
     }
 
     pub(super) fn settings(&mut self, ui: &mut egui::Ui) {
-        ui.heading(RichText::new("Settings").size(29.0).color(INK));
-        ui.label(RichText::new("Connection preferences and system integration").color(MUTED));
-        ui.add_space(18.0);
-        section(ui, "Traffic interception");
-        let changed = ui.checkbox(&mut self.data.settings.tun_requested, "Request TUN mode").changed()
-            | ui.checkbox(&mut self.data.settings.transparent_proxy_requested, "Request transparent proxy").changed()
-            | ui.checkbox(&mut self.data.settings.system_proxy_requested, "Request system proxy").changed();
-        if changed { self.save(); }
-        ui.add_space(10.0);
-        ui.group(|ui| {
-            ui.label(RichText::new("Requires a privileged helper").strong().color(INK));
-            ui.label("These switches store a preference, not an active system configuration.");
-            ui.label("macOS / Linux / FreeBSD must use a trusted OS authorization prompt (sudo/doas/polkit) when a real TUN helper is implemented.");
-            ui.label("No password is collected or stored by v2rayQ. Core and helper are not yet connected.");
+        heading(ui, "Settings");
+        card(ui, |ui| {
+            let mut change = None;
+            for (mode, label, status) in [
+                (NetworkMode::Tun, "TUN", &self.runtime.tun),
+                (
+                    NetworkMode::Transparent,
+                    "Transparent proxy",
+                    &self.runtime.transparent,
+                ),
+            ] {
+                ui.horizontal_wrapped(|ui| {
+                    ui.strong(label);
+                    ui.label(service_label(status));
+                    let enable = status.running != Some(true);
+                    if ui
+                        .add_enabled(
+                            status.can_change && self.pending == 0,
+                            egui::Button::new(if enable { "Start" } else { "Stop" }),
+                        )
+                        .clicked()
+                    {
+                        change = Some(Command::SetNetwork {
+                            mode,
+                            enabled: enable,
+                        });
+                    }
+                });
+            }
+            if let Some(command) = change {
+                self.send(command);
+            }
+            ui.add_space(5.0);
+            ui.label(if cfg!(unix) { "Starting or stopping an installed service uses sudo. Graphical sessions need SUDO_ASKPASS." }
+                else { "Starting or stopping an installed service requires an administrator session." });
+            if ui
+                .add_enabled(self.pending == 0, egui::Button::new("Refresh status"))
+                .clicked()
+            {
+                self.send(Command::Status);
+            }
         });
-        ui.add_space(16.0);
-        section(ui, "Local data");
-        ui.label(format!("Configuration: {}", self.data_path.display()));
-        ui.checkbox(&mut self.show_secrets, "Show advanced connection information");
-        if self.show_secrets {
-            ui.label("Share URLs, subscription tokens and node passwords are stored in the private redb database. Protect your user profile.");
-        }
+        card(ui, |ui| {
+            ui.strong("Profile database");
+            ui.label(self.data_path.display().to_string());
+        });
     }
 }
-

@@ -3,27 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
-  <title>v2rayQ · Server administration</title>
-  <link rel="stylesheet" href="assets/panel.css">
-  <script defer src="assets/panel.js"></script>
+  <meta name="v2rayq-transport" content="local">
+  <title>v2rayQ Server</title>
+  <link rel="stylesheet" href="assets/server.css">
+  <script type="module" src="assets/server.mjs"></script>
 </head>
-<body data-panel="server">
-  <div class="shell">
-    <aside class="sidebar">
-      <div class="brand"><span class="brandmark">◈</span><div><strong>v2rayQ</strong><small>SERVER CONSOLE</small></div></div>
-      <div class="sidebar-label">MANAGEMENT</div>
-      <nav id="navigation" aria-label="Server modules"></nav>
-      <div class="sidebar-footer"><span class="live-dot idle"></span><span>Core disconnected</span><small>Read-only preview</small></div>
+<body>
+  <div class="layout">
+    <aside class="rail">
+      <div class="brand"><span aria-hidden="true">◇</span><div>v2rayQ<small>Server</small></div></div>
+      <nav id="navigation" aria-label="Server navigation"></nav>
     </aside>
-    <main class="content">
-      <header class="topbar">
-        <div class="breadcrumbs"><span>Workspace</span><b>/</b><span id="breadcrumb">Overview</span></div>
-        <div class="top-actions"><span class="environment">LOCAL PREVIEW</span><span class="avatar">Q</span></div>
-      </header>
-      <section class="page-title"><div><div class="eyebrow">ADMINISTRATION</div><h1 id="page-heading">Overview</h1><p id="page-description">Monitor and manage your server from one workspace.</p></div><span class="status-pill"><span class="live-dot idle"></span> Core not connected</span></section>
-      <div id="view" aria-live="polite"></div>
-      <footer class="footer-note">v2rayQ · Rust server foundation · No management operations until Core integration and authentication</footer>
+    <main>
+      <h1 id="heading"></h1>
+      <div id="notice" role="status"></div>
+      <div id="view"></div>
     </main>
   </div>
 </body>
