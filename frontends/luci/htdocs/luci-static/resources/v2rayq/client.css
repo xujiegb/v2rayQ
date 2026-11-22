@@ -61,3 +61,7 @@
 .vq-client .vq-card-header { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
 .vq-client .vq-card-header h2 { margin: 0; }
 .vq-client .vq-rule-editor { margin: 12px 0; padding: 12px; border: 1px solid var(--vq-edge); border-radius: 8px; background: #f7faff; }
+.vq-client .vq-import-form { display: grid; gap: 12px; }
+.vq-client .vq-import-form textarea { width: 100%; min-height: 112px; resize: vertical; padding: 8px 10px; border: 1px solid var(--vq-edge); border-radius: 8px; color: var(--vq-ink); background: white; font: 14px/1.5 ui-monospace, monospace; }
+.vq-client .vq-import-form textarea:focus-visible { outline: 2px solid #586be2; outline-offset: 2px; }
+.vq-client .vq-file { width: min(100%, 400px); }

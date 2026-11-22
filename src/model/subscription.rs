@@ -9,6 +9,8 @@ pub struct Subscription {
     pub enabled: bool,
     pub last_updated_at: Option<i64>,
     pub last_error: Option<String>,
+    #[serde(default)]
+    pub refresh_revision: u64,
 }
 
 impl Subscription {
@@ -20,6 +22,7 @@ impl Subscription {
             enabled: true,
             last_updated_at: None,
             last_error: None,
+            refresh_revision: 0,
         }
     }
 }

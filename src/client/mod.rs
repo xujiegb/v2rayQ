@@ -1,4 +1,5 @@
 //! Client profile storage and operations shared by every frontend.
+mod import;
 mod manual;
 pub mod runtime;
 mod service;
@@ -11,10 +12,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use base64::{
-    Engine as _,
-    engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD},
-};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -93,28 +90,59 @@ impl ClientData {
     }
 
     pub fn add_subscription(&mut self, name: &str, link: &str) -> Result<Uuid, String> {
-        let url = url::Url::parse(link.trim()).map_err(|error| error.to_string())?;
-        if url.scheme() != "https"
-            || url.host_str().is_none()
-            || !url.username().is_empty()
-            || url.password().is_some()
-        {
-            return Err("Subscription requires an HTTPS URL without embedded credentials".into());
-        }
-        if name.trim().is_empty() {
-            return Err("Subscription name cannot be empty".into());
-        }
-        if self
-            .subscriptions
-            .iter()
-            .any(|item| item.url == url.as_str())
-        {
-            return Err("Subscription already exists".into());
-        }
-        let subscription = Subscription::new(name.trim(), url.as_str());
+        let url = subscription_url(link)?;
+        let name = subscription_name(name, &url)?;
+        self.check_subscription_url(&url, None)?;
+        let subscription = Subscription::new(name, url.as_str());
         let id = subscription.id;
         self.subscriptions.push(subscription);
         Ok(id)
+    }
+
+    pub fn update_subscription(
+        &mut self,
+        id: Uuid,
+        name: &str,
+        link: Option<&str>,
+    ) -> Result<(), String> {
+        let current = self
+            .subscriptions
+            .iter()
+            .find(|entry| entry.id == id)
+            .ok_or("Subscription not found")?;
+        let url = subscription_url(
+            link.filter(|link| !link.trim().is_empty())
+                .unwrap_or(&current.url),
+        )?;
+        let name = subscription_name(name, &url)?;
+        self.check_subscription_url(&url, Some(id))?;
+        let entry = self
+            .subscriptions
+            .iter_mut()
+            .find(|entry| entry.id == id)
+            .ok_or("Subscription not found")?;
+        if entry.url != url.as_str() {
+            entry.refresh_revision = entry
+                .refresh_revision
+                .checked_add(1)
+                .ok_or("Subscription revision exhausted")?;
+            entry.url = url.into();
+            entry.last_updated_at = None;
+            entry.last_error = None;
+        }
+        entry.name = name;
+        Ok(())
+    }
+
+    fn check_subscription_url(&self, url: &url::Url, except: Option<Uuid>) -> Result<(), String> {
+        if self
+            .subscriptions
+            .iter()
+            .any(|item| Some(item.id) != except && item.url == url.as_str())
+        {
+            return Err("Subscription already exists".into());
+        }
+        Ok(())
     }
 
     pub fn remove_subscription(&mut self, id: Uuid) {
@@ -135,12 +163,23 @@ impl ClientData {
             return Err("Subscription not found".into());
         }
         let mut parsed = parse_subscription(content)?;
-        if let Some(selected) = self.nodes.iter().find(|entry| {
-            entry.subscription_id == Some(id) && Some(entry.node.id) == self.selected_node
-        }) && let Some(replacement) = parsed.iter_mut().find(|node| {
-            node.endpoint == selected.node.endpoint && node.protocol == selected.node.protocol
-        }) {
-            replacement.id = selected.node.id;
+        let mut known = std::collections::HashMap::new();
+        for entry in self
+            .nodes
+            .iter()
+            .filter(|entry| entry.subscription_id == Some(id))
+        {
+            let key = import::identity(&entry.node);
+            if self.selected_node == Some(entry.node.id) {
+                known.insert(key, entry.node.id);
+            } else {
+                known.entry(key).or_insert(entry.node.id);
+            }
+        }
+        for node in &mut parsed {
+            if let Some(id) = known.get(&import::identity(node)) {
+                node.id = *id;
+            }
         }
         let count = parsed.len();
         self.nodes.retain(|entry| entry.subscription_id != Some(id));
@@ -169,6 +208,34 @@ impl ClientData {
             subscription.last_error = Some(message);
         }
     }
+}
+
+fn subscription_url(link: &str) -> Result<url::Url, String> {
+    let link = link.trim();
+    if link.len() > 4096 || link.chars().any(char::is_control) {
+        return Err("Enter an HTTPS subscription address of up to 4,096 bytes".into());
+    }
+    let mut url = url::Url::parse(link).map_err(|_| "Invalid subscription address")?;
+    if url.scheme() != "https"
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err("Subscription requires an HTTPS URL without user information".into());
+    }
+    url.set_fragment(None);
+    Ok(url)
+}
+
+fn subscription_name(name: &str, url: &url::Url) -> Result<String, String> {
+    let name = name.trim();
+    if name.len() > 256 || name.chars().any(char::is_control) {
+        return Err("Enter a subscription name of up to 256 bytes".into());
+    }
+    if name.is_empty() {
+        return Ok(url.host_str().unwrap_or("Subscription").to_owned());
+    }
+    Ok(name.to_owned())
 }
 
 pub fn default_data_path() -> PathBuf {
@@ -202,47 +269,15 @@ pub fn default_data_path() -> PathBuf {
 /// Handles newline-delimited share links or base64-wrapped link lists.
 /// The existing protocol parsers are the sole authority for supported shares.
 pub fn parse_subscription(input: &str) -> Result<Vec<Node>, String> {
-    if input.len() > MAX_SUBSCRIPTION_BYTES {
-        return Err("Subscription exceeds 4 MiB".into());
-    }
-    let mut nodes = parse_lines(input);
-    if nodes.is_empty() {
-        // Subscription providers sometimes wrap base64 payloads at fixed columns.
-        let encoded: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
-        for engine in [STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD] {
-            if let Ok(bytes) = engine.decode(&encoded)
-                && bytes.len() <= MAX_SUBSCRIPTION_BYTES
-                && let Ok(decoded) = String::from_utf8(bytes)
-            {
-                nodes = parse_lines(&decoded);
-                if !nodes.is_empty() {
-                    break;
-                }
-            }
-        }
-    }
-    if nodes.is_empty() {
-        return Err("No supported share links found in subscription".into());
-    }
-    if nodes.len() > MAX_NODES {
-        return Err("Subscription has too many nodes".into());
-    }
-    Ok(nodes)
-}
-
-fn parse_lines(input: &str) -> Vec<Node> {
-    input
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .filter_map(|line| parser::parse(line).ok())
-        .take(MAX_NODES + 1)
-        .collect()
+    let mut parsed = import::Import::parse(input)?;
+    parsed.deduplicate(std::iter::empty());
+    Ok(parsed.nodes)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
 
     const SHARE: &str = "trojan://password@example.org:443?security=tls#Example";
 
@@ -277,6 +312,20 @@ mod tests {
         state.apply_subscription(id, renamed)?;
         assert_eq!(state.selected_node, active);
         assert_eq!(state.nodes[0].node.name, "New name");
+        Ok(())
+    }
+
+    #[test]
+    fn refresh_reuses_all_node_ids_and_deduplicates_equivalent_links() -> Result<(), String> {
+        let mut data = ClientData::default();
+        let id = data.add_subscription("Example", "https://example.org/sub")?;
+        let second = "trojan://other@example.org:8443?security=tls#Other";
+        data.apply_subscription(id, &format!("{SHARE}\n{second}\n{second}"))?;
+        let ids: Vec<_> = data.nodes.iter().map(|entry| entry.node.id).collect();
+        assert_eq!(ids.len(), 2);
+        data.apply_subscription(id, &format!("{second}\n{SHARE}"))?;
+        let reversed: Vec<_> = data.nodes.iter().rev().map(|entry| entry.node.id).collect();
+        assert_eq!(reversed, ids);
         Ok(())
     }
 

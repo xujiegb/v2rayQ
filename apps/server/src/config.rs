@@ -13,6 +13,7 @@ enum Section {
     Nodes,
     Services,
     Tls,
+    Reality,
     Routes,
     Dns,
     Administrators,
@@ -20,13 +21,14 @@ enum Section {
 }
 
 impl Section {
-    const ALL: [Self; 10] = [
+    const ALL: [Self; 11] = [
         Self::Inbounds,
         Self::Users,
         Self::Outbounds,
         Self::Nodes,
         Self::Services,
         Self::Tls,
+        Self::Reality,
         Self::Routes,
         Self::Dns,
         Self::Administrators,
@@ -41,6 +43,7 @@ impl Section {
             Self::Nodes => "server/nodes",
             Self::Services => "server/services",
             Self::Tls => "server/tls",
+            Self::Reality => "server/reality",
             Self::Routes => "server/routes",
             Self::Dns => "server/dns",
             Self::Administrators => "server/administrators",
@@ -81,6 +84,7 @@ struct Draft {
 enum Command {
     Overview,
     System,
+    SecurityProfiles,
     Load {
         section: Section,
     },
@@ -129,6 +133,10 @@ fn run(command: Command) -> v2rayq_storage::StorageResult<Value> {
             }
             Ok(json!({ "counts": counts, "core_connected": false }))
         }
+        Command::SecurityProfiles => Ok(json!({
+            "tls": profile_names(&store, Section::Tls)?,
+            "reality": profile_names(&store, Section::Reality)?,
+        })),
         Command::Load { section } => Ok(json!(
             store
                 .get::<Draft>(section.key())?
@@ -162,6 +170,22 @@ fn run(command: Command) -> v2rayq_storage::StorageResult<Value> {
         }
         Command::System => unreachable!("System handled before opening storage"),
     }
+}
+
+fn profile_names(store: &Storage, section: Section) -> v2rayq_storage::StorageResult<Vec<String>> {
+    let draft = store.get::<Draft>(section.key())?;
+    let mut names: Vec<_> = draft
+        .as_ref()
+        .and_then(|draft| draft.value.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item.get("name").and_then(Value::as_str))
+        .filter(|name| !name.trim().is_empty())
+        .map(str::to_owned)
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    Ok(names)
 }
 
 fn data_path() -> PathBuf {

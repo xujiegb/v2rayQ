@@ -7,6 +7,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::import::Import;
 use super::manual::node_endpoint;
 use super::runtime::{self, NetworkMode, Runtime};
 use super::{ClientData, MAX_SUBSCRIPTION_BYTES, ManualNode, ProtocolKind, default_data_path};
@@ -26,6 +27,12 @@ pub enum Access {
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Command {
     Profile,
+    PreviewImport {
+        content: String,
+    },
+    ImportNodes {
+        content: String,
+    },
     AddLink {
         link: String,
     },
@@ -50,6 +57,11 @@ pub enum Command {
     AddSubscription {
         name: String,
         url: String,
+    },
+    UpdateSubscription {
+        id: Uuid,
+        name: String,
+        url: Option<String>,
     },
     RefreshSubscription {
         id: Uuid,
@@ -101,6 +113,7 @@ pub struct NodeSummary {
 pub struct SubscriptionSummary {
     pub id: Uuid,
     pub name: String,
+    pub node_count: usize,
     pub last_updated_at: Option<i64>,
     pub last_error: Option<String>,
 }
@@ -153,6 +166,26 @@ impl ClientService {
                     ..Reply::default()
                 })
             }
+            Command::PreviewImport { content } => {
+                let parsed = Import::parse(&content)?;
+                let mut data = ClientData::load(&self.path).map_err(|error| error.to_string())?;
+                Ok(Reply {
+                    message: Some(parsed.apply(&mut data, true)),
+                    ..Reply::default()
+                })
+            }
+            Command::ImportNodes { content } => {
+                let parsed = Import::parse(&content)?;
+                let (profile, message) = self.update(|data| {
+                    let message = parsed.apply(data, false);
+                    Ok((Profile::from_data(data), message))
+                })?;
+                Ok(Reply {
+                    profile: Some(profile),
+                    message: Some(message),
+                    ..Reply::default()
+                })
+            }
             Command::AddSubscription { name, url } => {
                 let id = self.update(|data| data.add_subscription(&name, &url))?;
                 self.refresh(id)
@@ -190,16 +223,27 @@ impl ClientService {
     }
 
     fn refresh(&self, id: Uuid) -> Result<Reply, String> {
-        let subscription = ClientData::load(&self.path)
-            .map_err(|error| error.to_string())?
-            .subscriptions
-            .into_iter()
-            .find(|item| item.id == id)
-            .ok_or("Subscription not found")?;
-        let download = download_subscription(&subscription.url);
+        let (url, revision) = self.update(|data| {
+            let subscription = data
+                .subscriptions
+                .iter_mut()
+                .find(|item| item.id == id)
+                .ok_or("Subscription not found")?;
+            subscription.refresh_revision = subscription
+                .refresh_revision
+                .checked_add(1)
+                .ok_or("Subscription revision exhausted")?;
+            Ok((subscription.url.to_owned(), subscription.refresh_revision))
+        })?;
+        let download = download_subscription(&url);
         let (profile, message) = self.update(|data| {
-            if !data.subscriptions.iter().any(|item| item.id == id) {
-                return Err("Subscription was deleted during refresh".into());
+            let current = data
+                .subscriptions
+                .iter()
+                .find(|item| item.id == id)
+                .ok_or("Subscription was deleted during refresh")?;
+            if current.refresh_revision != revision {
+                return Err("A newer subscription refresh or edit replaced this result".into());
             }
             let message = match download.and_then(|content| data.apply_subscription(id, &content)) {
                 Ok(count) => format!("Imported {count} nodes"),
@@ -283,6 +327,10 @@ fn edit_profile(data: &mut ClientData, action: Command) -> Result<&'static str, 
         Command::RemoveNode { id } => {
             data.remove_node(id);
             Ok("Node deleted")
+        }
+        Command::UpdateSubscription { id, name, url } => {
+            data.update_subscription(id, &name, url.as_deref())?;
+            Ok("Subscription saved")
         }
         Command::RemoveSubscription { id } => {
             data.remove_subscription(id);
@@ -377,6 +425,10 @@ impl From<ClientData> for Profile {
 
 impl Profile {
     fn from_data(data: &ClientData) -> Self {
+        let mut counts = std::collections::HashMap::new();
+        for id in data.nodes.iter().filter_map(|node| node.subscription_id) {
+            *counts.entry(id).or_insert(0) += 1;
+        }
         Self {
             nodes: data
                 .nodes
@@ -396,6 +448,7 @@ impl Profile {
                 .map(|entry| SubscriptionSummary {
                     id: entry.id,
                     name: entry.name.to_owned(),
+                    node_count: counts.get(&entry.id).copied().unwrap_or_default(),
                     last_updated_at: entry.last_updated_at,
                     last_error: entry
                         .last_error

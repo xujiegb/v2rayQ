@@ -70,6 +70,7 @@ pub struct ClientApp {
     data_path: PathBuf,
     form: NodeForm,
     share_link: String,
+    subscription_edit: Option<Uuid>,
     subscription_name: String,
     subscription_url: String,
     manual: ManualNode,
@@ -103,9 +104,11 @@ impl ClientApp {
         std::thread::spawn(move || {
             while let Ok(command) = requests.recv() {
                 let completion = match command {
-                    Command::AddLink { .. } => Completion::NodeForm(NodeForm::Share),
+                    Command::ImportNodes { .. } => Completion::NodeForm(NodeForm::Share),
                     Command::AddNode { .. } => Completion::NodeForm(NodeForm::Manual),
-                    Command::AddSubscription { .. } => Completion::NodeForm(NodeForm::Subscription),
+                    Command::AddSubscription { .. } | Command::UpdateSubscription { .. } => {
+                        Completion::NodeForm(NodeForm::Subscription)
+                    }
                     Command::UpdateNode { .. } => Completion::Endpoint,
                     Command::SaveRouteRule { .. } => Completion::Rule,
                     _ => Completion::Other,
@@ -126,6 +129,7 @@ impl ClientApp {
             data_path,
             form: NodeForm::None,
             share_link: String::new(),
+            subscription_edit: None,
             subscription_name: String::new(),
             subscription_url: String::new(),
             manual: ManualNode::default(),
@@ -177,6 +181,7 @@ impl ClientApp {
                                 self.share_link.clear();
                             }
                             if form == NodeForm::Subscription {
+                                self.subscription_edit = None;
                                 self.subscription_name.clear();
                                 self.subscription_url.clear();
                             }

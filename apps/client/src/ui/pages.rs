@@ -63,12 +63,16 @@ impl ClientApp {
         heading(ui, "Nodes");
         ui.horizontal_wrapped(|ui| {
             for (form, name) in [
-                (NodeForm::Share, "Import link"),
+                (NodeForm::Share, "Import links"),
                 (NodeForm::Manual, "Manual node"),
                 (NodeForm::Subscription, "Add subscription"),
             ] {
                 if ui.selectable_label(self.form == form, name).clicked() {
                     self.endpoint_editor = None;
+                    if self.subscription_edit.take().is_some() {
+                        self.subscription_name.clear();
+                        self.subscription_url.clear();
+                    }
                     self.form = if self.form == form {
                         NodeForm::None
                     } else {
@@ -81,19 +85,58 @@ impl ClientApp {
         ui.add_enabled_ui(self.pending == 0, |ui| {
             match self.form {
                 NodeForm::Share => card(ui, |ui| {
-                    form_row(ui, "Share URI", &mut self.share_link, true);
-                    if ui.button("Import node").clicked() {
-                        let link = self.share_link.to_owned();
-                        self.send(Command::AddLink { link });
-                    }
+                    ui.strong("Import share links");
+                    ui.label("Paste one link per line or a base64 list.");
+                    ui.add(
+                        egui::TextEdit::multiline(&mut self.share_link)
+                            .password(true)
+                            .desired_rows(6)
+                            .desired_width(ui.available_width()),
+                    );
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button("Preview import").clicked() {
+                            let content = self.share_link.to_owned();
+                            self.send(Command::PreviewImport { content });
+                        }
+                        if ui.button("Import nodes").clicked() {
+                            let content = self.share_link.to_owned();
+                            self.send(Command::ImportNodes { content });
+                        }
+                    });
                 }),
                 NodeForm::Subscription => card(ui, |ui| {
-                    form_row(ui, "Name", &mut self.subscription_name, false);
-                    form_row(ui, "HTTPS URL", &mut self.subscription_url, true);
-                    if ui.button("Add and refresh").clicked() {
+                    let editing = self.subscription_edit.is_some();
+                    ui.strong(if editing {
+                        "Edit subscription"
+                    } else {
+                        "New subscription"
+                    });
+                    form_row(ui, "Name (optional)", &mut self.subscription_name, false);
+                    let caption = if editing {
+                        "New HTTPS URL (leave blank to keep current URL)"
+                    } else {
+                        "HTTPS URL"
+                    };
+                    form_row(ui, caption, &mut self.subscription_url, true);
+                    if ui
+                        .button(if editing {
+                            "Save subscription"
+                        } else {
+                            "Add and refresh"
+                        })
+                        .clicked()
+                    {
                         let name = self.subscription_name.to_owned();
                         let url = self.subscription_url.to_owned();
-                        self.send(Command::AddSubscription { name, url });
+                        let command = match self.subscription_edit {
+                            Some(id) => Command::UpdateSubscription {
+                                id,
+                                name,
+                                url: Some(url),
+                            },
+                            None => Command::AddSubscription { name, url },
+                        };
+                        self.send(command);
                     }
                 }),
                 NodeForm::Manual => card(ui, |ui| self.manual_node(ui)),
@@ -207,7 +250,14 @@ impl ClientApp {
                 for (index, item) in self.profile.subscriptions.iter().enumerate() {
                     ui.separator();
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(&item.name);
+                        ui.strong(&item.name);
+                        ui.label(format!("{} nodes", item.node_count));
+                        if ui.small_button("Edit subscription").clicked() {
+                            self.form = NodeForm::Subscription;
+                            self.subscription_edit = Some(item.id);
+                            self.subscription_name = item.name.to_owned();
+                            self.subscription_url.clear();
+                        }
                         if let Some(error) = &item.last_error {
                             ui.label(error);
                         }

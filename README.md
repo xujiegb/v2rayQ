@@ -39,13 +39,15 @@ v2rayq-cli routes
 printf '%s\n' '{"kind":"domain_suffix","value":"example.org","target":"direct"}' | v2rayq-cli add-rule
 ```
 
+In Nodes, **Import links** previews and imports newline-separated or base64 link lists. The browser panel also accepts a local UTF-8 text file. Batch imports skip duplicates already saved locally and report unsupported lines. Subscription edits keep the existing URL when the replacement field is blank, and keep the imported nodes until a successful refresh. The CLI offers `preview-import`, `import`, `update-subscription` and `replace-subscription-url`. Pass links and replacement URLs on stdin to keep credentials out of command arguments.
+
 The default client database is `client.redb` in the user configuration directory. The first read or edit imports a previous `client.json` and retains that file. Keep any Turso/SQLite `v2rayQ.db` for a separate migration. Both redb stores may contain unencrypted credentials. `V2RAYQ_CLIENT_DB` and `V2RAYQ_SERVER_DB` override their respective paths.
 
 TUN and transparent proxy controls start and stop administrator-provisioned host services. The panel reflects the service manager's reported state. The installed services own their own proxy configuration, so selecting a node or editing routes in the v2rayQ profile does not reconfigure those services. See [network service setup](packaging/network/README.md).
 
 ## Server panel
 
-Overview and System display persisted configuration counts and local host information. Inbounds, Users, Outbounds, Nodes, Services, TLS, Routes, DNS, Administrators and Settings store independent drafts in `server.redb`. The editor provides per-section fields and an optional JSON view for additional draft settings. The external Core adapter is pending. Draft records do not configure a running Core or create active administrator accounts.
+Overview and System display persisted configuration counts and local host information. Inbounds, Users, Outbounds, Nodes, Services, TLS, REALITY, Routes, DNS, Administrators and Settings store independent drafts in `server.redb`. The Nodes editor shows fields by protocol and supports references to profile names in the separate TLS and REALITY sections. TLS drafts hold certificate paths and ALPN. REALITY drafts hold handshake parameters and keys. An optional JSON view preserves additional draft settings. The external Core adapter is pending. Draft records do not configure a running Core or create active administrator accounts.
 
 ## Source layout
 

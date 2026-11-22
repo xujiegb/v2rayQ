@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise the real HTTP and CLI entry points against isolated profile stores."""
+from base64 import b64encode
 from contextlib import contextmanager
 import http.client
 import json
@@ -105,6 +106,22 @@ with tempfile.TemporaryDirectory() as directory:
         assert second_id in stored[0] and first_id in stored[1] and "443 → Block" in stored[1]
         removed = command(port, token, {"action": "remove_route_rule", "id": second_id})[1]
         assert removed["result"]["profile"]["settings"]["route_rules"] == [{"id": first_id, **changed}]
+        share_list = "\ufeff# Local import\n" + (SHARE.replace("example.org", "next.example.net") + "\n") * 2 + "invalid"
+        encoded = b64encode(share_list.encode()).decode()
+        preview = command(port, token, {"action": "preview_import", "content": encoded})[1]["result"]
+        assert preview == {"message": "Ready to import 1 node · 1 duplicate · 1 skipped"}
+        cli_preview = subprocess.run([BINARIES / "v2rayq-cli", "preview-import"], input=encoded, env=env, text=True, check=True, capture_output=True)
+        assert cli_preview.stdout.strip() == preview["message"]
+        imported = command(port, token, {"action": "import_nodes", "content": encoded})[1]["result"]["profile"]
+        assert len(imported["nodes"]) == 3 and imported["selected_node"] == copy["selected_node"]
+        repeated = command(port, token, {"action": "import_nodes", "content": encoded})[1]["result"]
+        assert len(repeated["profile"]["nodes"]) == 3 and "2 duplicates" in repeated["message"]
+
+        new = command(port, token, {"action": "add_subscription", "name": "", "url": "https://127.0.0.1:1/list?token=private"})[1]["result"]["profile"]
+        item = new["subscriptions"][0]
+        assert item["name"] == "127.0.0.1" and item["node_count"] == 0 and "private" not in json.dumps(new)
+        updated = command(port, token, {"action": "update_subscription", "id": item["id"], "name": "Replacement", "url": "https://127.0.0.1:2/next?token=private"})[1]["result"]["profile"]
+        assert updated["subscriptions"][0]["name"] == "Replacement" and updated["subscriptions"][0]["last_error"] is None
     with launch("v2rayq-server", env) as (port, token):
         request = {"action": "save", "section": "inbounds", "revision": 0, "value": [{"tag": "proxy"}]}
         assert command(port, token, request)[1]["result"]["revision"] == 1
@@ -113,4 +130,14 @@ with tempfile.TemporaryDirectory() as directory:
         assert result == {"revision": 1, "value": [{"tag": "proxy"}]}
         assert command(port, token, {"action": "overview"})[1]["result"]["counts"]["inbounds"] == 1
 
-print("Panel authorization, fragmented HTTP bodies, shared client storage, route rules and server drafts: OK")
+        tls = [{"name": "Public TLS", "certificate_path": "/cert.pem", "key_path": "/key.pem"}]
+        reality = [{"name": "Gateway", "private_key": "secret-key", "handshake_port": 443}]
+        for section, values in [("tls", tls), ("reality", reality)]:
+            saved = command(port, token, {"action": "save", "section": section, "revision": 0, "value": values})[1]
+            assert saved["result"]["revision"] == 1
+            loaded = command(port, token, {"action": "load", "section": section})[1]["result"]
+            assert loaded["value"] == values
+        names = command(port, token, {"action": "security_profiles"})[1]["result"]
+        assert names == {"tls": ["Public TLS"], "reality": ["Gateway"]}
+
+print("Panel authorization, fragmented HTTP bodies, shared client storage, batch imports, subscriptions and TLS/REALITY drafts: OK")

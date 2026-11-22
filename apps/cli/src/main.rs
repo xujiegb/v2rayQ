@@ -11,13 +11,16 @@ use v2rayQ::client::{Access, ClientService, Command, Reply, runtime::ServiceStat
 
 const HELP: &str = "v2rayq-cli
   status | nodes | subscriptions | routes
-  add-link                          Read a share link from stdin
+  import | preview-import           Read share links or a base64 list from stdin
+  add-link                          Read one share link from stdin
   add-node                          Read a manual node JSON object from stdin
   subscribe NAME                    Read an HTTPS subscription URL from stdin
   select ID | delete ID | copy-node ID
   edit-node ID NAME HOST PORT
   add-rule | edit-rule ID           Read rule fields as JSON from stdin
   delete-rule ID | move-rule ID up|down
+  update-subscription ID NAME       Rename a subscription
+  replace-subscription-url ID NAME  Read a replacement HTTPS URL from stdin
   refresh ID | unsubscribe ID
   routing direct|global|rules [DNS]
   tun on|off | transparent on|off";
@@ -90,6 +93,20 @@ fn parse(args: &[&str]) -> Result<Command, String> {
     let command: Value = match args {
         ["status"] => json!({ "action": "status" }),
         ["nodes" | "subscriptions" | "routes"] => json!({ "action": "profile" }),
+        ["import" | "preview-import"] => {
+            let action = if args[0] == "import" {
+                "import_nodes"
+            } else {
+                "preview_import"
+            };
+            json!({ "action": action, "content": read_input()? })
+        }
+        ["update-subscription", id, name] => {
+            json!({ "action": "update_subscription", "id": id, "name": name })
+        }
+        ["replace-subscription-url", id, name] => {
+            json!({ "action": "update_subscription", "id": id, "name": name, "url": read_input()?.trim() })
+        }
         ["add-link"] => json!({ "action": "add_link", "link": read_input()?.trim() }),
         ["add-node"] => {
             json!({ "action": "add_node", "node": serde_json::from_str::<Value>(&read_input()?)
@@ -158,9 +175,10 @@ fn print_reply(reply: Reply, args: &[&str]) {
         } else if args == ["subscriptions"] {
             for item in profile.subscriptions {
                 println!(
-                    "{}  {}  {}",
+                    "{}  {}  {} nodes  {}",
                     item.id,
                     terminal_text(&item.name),
+                    item.node_count,
                     item.last_error.as_deref().unwrap_or("Ready")
                 );
             }
