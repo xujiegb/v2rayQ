@@ -20,6 +20,7 @@ jobs:
       - run: cargo test -p v2rayq-http-preview
       - run: cargo check -p v2rayq-server -p v2rayq-web-client
       - run: python3 tools/check_ui_parity.py
+      - run: python3 tools/check_workspace_boundaries.py
       - name: Check first-party safe Rust policy
         shell: bash
         run: |
