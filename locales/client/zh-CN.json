@@ -308,5 +308,11 @@
   "Scan one subscription QR code at a time": "请一次识别一个订阅二维码",
   "No supported QR code found": "未找到支持的二维码",
   "Delete {name}?": "删除 {name}？",
-  "Discard unsaved changes?": "放弃尚未保存的修改？"
+  "Discard unsaved changes?": "放弃尚未保存的修改？",
+  "Theme": "主题",
+  "Follow system": "跟随系统",
+  "Light": "浅色",
+  "Dark": "深色",
+  "Theme saved": "主题已保存",
+  "Unsupported theme": "不支持的主题"
 }

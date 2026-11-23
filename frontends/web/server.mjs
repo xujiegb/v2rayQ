@@ -1,3 +1,4 @@
+import { applyTheme, themeChoices } from "./appearance.js";
 import { loadLocalization } from "./i18n.js";
 import { transport } from "./transport.mjs";
 import { fields, defaults, choices } from "./server-fields.mjs";
@@ -17,6 +18,7 @@ const serverPages = [
   ["administrators", "Administrators", "♙", "Administration"],
   ["settings", "Settings", "⚙", "Administration"]
 ];
+applyTheme(document.documentElement, "system");
 const i18n = await loadLocalization(new URL("./locales/", import.meta.url), "server");
 const nav = document.getElementById("navigation");
 const heading = document.getElementById("heading");
@@ -407,6 +409,26 @@ for (const [key, title, icon, section] of serverPages) {
 
 try {
   send = await transport("v2rayq-server");
+  const savedTheme = await send({ action: "theme" });
+  applyTheme(document.documentElement, savedTheme.theme);
+  const themeLabel = element("label", "language-control appearance-control");
+  themeLabel.append(localizedElement("span", "", "Theme"));
+  const themeSelect = element("select");
+  themeSelect.dataset.i18nLabel = "Theme";
+  for (const [value, title] of Object.entries(themeChoices)) {
+    const option = localizedElement("option", "", title); option.value = value; themeSelect.append(option);
+  }
+  themeSelect.value = document.documentElement.dataset.theme;
+  themeSelect.onchange = async () => {
+    themeSelect.disabled = true;
+    try {
+      await send({ action: "save_theme", theme: themeSelect.value });
+      applyTheme(document.documentElement, themeSelect.value);
+    } catch (error) { notice.textContent = i18n.message(error.message); }
+    finally { themeSelect.disabled = false; themeSelect.value = document.documentElement.dataset.theme; }
+  };
+  themeLabel.append(themeSelect);
+  document.querySelector(".rail").insertBefore(themeLabel, nav);
   const preference = await send({ action: "language" });
   await i18n.use(preference.language);
   const label = element("label", "language-control");

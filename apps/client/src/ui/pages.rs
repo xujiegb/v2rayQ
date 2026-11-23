@@ -154,7 +154,7 @@ impl ClientApp {
                                 node.host,
                                 node.port
                             ))
-                            .color(MUTED),
+                            .color(theme::palette(ui).muted),
                         );
                         let mut group_id = node.group_id;
                         egui::ComboBox::from_id_salt(("node_group", node.id))

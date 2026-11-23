@@ -9,6 +9,13 @@ use v2rayq_http_preview::{Asset, COMMAND_LIMIT, Panel, serve};
 
 const ASSETS: &[Asset] = &[
     Asset {
+        path: "/assets/appearance.js",
+        mime: "text/javascript; charset=utf-8",
+        body: include_str!(
+            "../../../frontends/luci/htdocs/luci-static/resources/v2rayq/appearance.js"
+        ),
+    },
+    Asset {
         path: "/assets/i18n.js",
         mime: "text/javascript; charset=utf-8",
         body: include_str!("../../../frontends/luci/htdocs/luci-static/resources/v2rayq/i18n.js"),

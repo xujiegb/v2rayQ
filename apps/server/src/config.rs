@@ -85,6 +85,10 @@ enum Command {
     Overview,
     System,
     SecurityProfiles,
+    Theme,
+    SaveTheme {
+        theme: String,
+    },
     Language,
     SaveLanguage {
         language: String,
@@ -136,6 +140,16 @@ fn run(command: Command) -> v2rayq_storage::StorageResult<Value> {
                 counts.insert(name.into(), json!(count));
             }
             Ok(json!({ "counts": counts, "core_connected": false }))
+        }
+        Command::Theme => Ok(
+            json!({ "theme": store.get::<String>("panel/theme")?.unwrap_or_else(|| "system".into()) }),
+        ),
+        Command::SaveTheme { theme } => {
+            if !matches!(theme.as_str(), "system" | "light" | "dark") {
+                return Err("Unsupported theme".into());
+            }
+            store.put("panel/theme", &theme)?;
+            Ok(json!({}))
         }
         Command::Language => {
             Ok(json!({ "language": store.get::<String>("panel/language")?.unwrap_or_default() }))

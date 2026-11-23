@@ -308,5 +308,11 @@
   "Scan one subscription QR code at a time": "Scannez un seul abonnement à la fois",
   "No supported QR code found": "Aucun QR code compatible trouvé",
   "Delete {name}?": "Supprimer {name} ?",
-  "Discard unsaved changes?": "Abandonner les modifications ?"
+  "Discard unsaved changes?": "Abandonner les modifications ?",
+  "Theme": "Thème",
+  "Follow system": "Suivre le système",
+  "Light": "Clair",
+  "Dark": "Sombre",
+  "Theme saved": "Thème enregistré",
+  "Unsupported theme": "Thème non pris en charge"
 }

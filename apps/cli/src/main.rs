@@ -101,6 +101,7 @@ fn parse(args: &[&str]) -> Result<Command, String> {
         ["merge-config"] | ["merge-config", "--preferences"] => json!({
             "action": "merge_configuration", "content": read_input()?, "use_preferences": args.len() == 2
         }),
+        ["theme", theme] => json!({ "action": "save_theme", "theme": theme }),
         ["language", language] => json!({ "action": "save_language", "language": language }),
         ["status"] => json!({ "action": "status" }),
         ["inspect-network"] => json!({ "action": "inspect_network" }),

@@ -57,6 +57,14 @@ Both applications support Simplified Chinese, Traditional Chinese, English and F
 
 TUN and transparent proxy controls start and stop administrator-provisioned host services. The panel reflects the service manager's reported state. The installed services own their own proxy configuration, so selecting a node or editing routes in the v2rayQ profile does not reconfigure those services. See [network service setup](packaging/network/README.md).
 
+## Appearance and interface previews
+
+Both applications support **Follow system**, **Light** and **Dark**. Client Settings saves its preference in the shared profile, including portable export/merge; the server sidebar stores its own preference independently of configuration drafts. egui follows the operating system through egui's native theme preference, while Web, LuCI and Cockpit respond to the system color scheme through CSS. Embedded clients only style their own surface and leave the host's appearance unchanged.
+
+Client color tokens live in `client.css`, server tokens in `server.css`, and the egui palette and typography in `apps/client/src/ui/theme.rs`. All native pages read that palette. Theme changes preserve server edits and the client configuration buffer. Existing profiles default to system appearance. No new runtime dependency is required.
+
+`tools/test_themes.mjs` validates both modes, live system changes, saved preferences and plugin host isolation, then captures the real Web and plugin assets. Its labelled LuCI/Cockpit shell is a test harness connected to the real Rust RPC, rather than a running router or Cockpit installation. `tools/capture_native.py` captures the actual egui executable on an isolated X server. These screenshot tools need browser/X11 utilities on the test host only. The Interface flows workflow publishes all six surfaces in both appearances under `interface-previews`.
+
 ## Dashboard, groups and QR import
 
 The client's Overview puts the installed proxy service switch, current profile node, traffic slots and host IP location together. The TUN and transparent modes share the existing authorization path. The switch follows observed service status and prevents starting a second mode while the other is running. Proxy throughput remains unavailable until the custom Core adapter supplies counters; the UI displays an em dash instead of a synthetic speed.

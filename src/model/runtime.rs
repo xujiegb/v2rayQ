@@ -11,6 +11,8 @@ pub struct RuntimeSettings {
     pub system_proxy_requested: bool,
     pub route_mode: RouteMode,
     pub language: String,
+    /// Empty is equivalent to following the system appearance.
+    pub theme: String,
     pub dns_server: String,
     pub route_rules: Vec<RouteRule>,
 }

@@ -219,3 +219,25 @@ with tempfile.TemporaryDirectory() as directory:
         assert "error" in command(port, token, {"action": "import_nodes", "group_id": missing, "content": "trojan://secret@new.example.org:443#Invalid"})[1]
         assert len(command(port, token, {"action": "profile"})[1]["result"]["profile"]["nodes"]) == count
 print("Node group lifecycle, configuration membership and unavailable telemetry: OK")
+
+with tempfile.TemporaryDirectory() as directory:
+    env = {**os.environ, "V2RAYQ_CLIENT_DB": f"{directory}/theme-client.redb", "V2RAYQ_SERVER_DB": f"{directory}/theme-server.redb"}
+    with launch("v2rayq-web-client", env) as (port, token):
+        for theme in ["system", "light", "dark"]:
+            profile = command(port, token, {"action": "save_theme", "theme": theme})[1]["result"]["profile"]
+            assert profile["settings"]["theme"] == theme
+        assert "error" in command(port, token, {"action": "save_theme", "theme": "unknown"})[1]
+        exported = command(port, token, {"action": "export_configuration"})[1]["result"]["configuration"]
+        command(port, token, {"action": "save_theme", "theme": "light"})
+        merged = command(port, token, {"action": "merge_configuration", "content": exported})[1]["result"]["profile"]
+        assert merged["settings"]["theme"] == "light"
+        merged = command(port, token, {"action": "merge_configuration", "content": exported, "use_preferences": True})[1]["result"]["profile"]
+        assert merged["settings"]["theme"] == "dark"
+    with launch("v2rayq-server", env) as (port, token):
+        command(port, token, {"action": "save", "section": "settings", "revision": 0, "value": {"name": "Panel"}})
+        for theme in ["dark", "light", "system"]:
+            command(port, token, {"action": "save_theme", "theme": theme})
+            assert command(port, token, {"action": "theme"})[1]["result"]["theme"] == theme
+        assert "error" in command(port, token, {"action": "save_theme", "theme": "unknown"})[1]
+        assert command(port, token, {"action": "load", "section": "settings"})[1]["result"]["revision"] == 1
+print("Independent theme persistence, validation and portable configuration: OK")

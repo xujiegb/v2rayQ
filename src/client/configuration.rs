@@ -88,6 +88,12 @@ impl Configuration {
         {
             data.settings.language.clear();
         }
+        if !matches!(
+            data.settings.theme.as_str(),
+            "" | "system" | "light" | "dark"
+        ) {
+            data.settings.theme.clear();
+        }
         let mut groups = HashSet::new();
         if data.groups.len() > 128 {
             return Err("A profile can contain up to 128 groups".into());
